@@ -9,7 +9,6 @@ import { Table, Thead, Tbody, Tr, Th, Td } from "../../components/Table";
 import { inputClass, labelClass } from "../../components/formStyles";
 import { currentMonth, daysInMonth, isWeekend, weekdayLetter } from "../../lib/dates";
 import { formatTimeCompact } from "../../lib/time";
-import { useScrollIntoView } from "../../lib/useScrollIntoView";
 
 interface Employee {
   id: string;
@@ -73,7 +72,6 @@ export function HoraireMatrixPage() {
   });
 
   const days = daysInMonth(month);
-  const panelRef = useScrollIntoView<HTMLDivElement>(selected);
   const entryFor = (employeeId: string, date: string) =>
     entries?.find((e) => e.employeeId === employeeId && e.date.slice(0, 10) === date);
   const absenceFor = (employeeId: string, date: string) =>
@@ -165,7 +163,7 @@ export function HoraireMatrixPage() {
         </div>
 
         {selected && (
-          <div ref={panelRef} className="w-72 shrink-0 scroll-mt-6">
+          <div className="sticky top-6 w-72 shrink-0 self-start">
             <Card
               title={`${selected.employeeName} — ${selected.date}`}
               actions={
