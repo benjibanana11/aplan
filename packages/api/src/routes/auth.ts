@@ -1,7 +1,8 @@
 import { Router } from "express";
 import bcrypt from "bcrypt";
-import { registerSchema, loginSchema, type Role } from "@aplan/shared";
+import { registerSchema, loginSchema, changePasswordSchema, type Role } from "@aplan/shared";
 import { prisma } from "../db.js";
+import { requireAuth } from "../middleware/requireAuth.js";
 
 export const authRouter = Router();
 
@@ -72,6 +73,31 @@ authRouter.post("/logout", (req, res) => {
   req.session.destroy(() => {
     res.status(204).send();
   });
+});
+
+authRouter.post("/change-password", requireAuth, async (req, res) => {
+  const parsed = changePasswordSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+  const { currentPassword, newPassword } = parsed.data;
+
+  const user = await prisma.user.findUnique({ where: { id: req.session.userId } });
+  if (!user) {
+    res.status(401).json({ error: "Non authentifié" });
+    return;
+  }
+
+  const valid = await bcrypt.compare(currentPassword, user.passwordHash);
+  if (!valid) {
+    res.status(400).json({ error: "Mot de passe actuel incorrect" });
+    return;
+  }
+
+  const passwordHash = await bcrypt.hash(newPassword, 12);
+  await prisma.user.update({ where: { id: user.id }, data: { passwordHash } });
+  res.status(204).send();
 });
 
 authRouter.get("/me", async (req, res) => {

@@ -14,6 +14,7 @@ import { SkillsMatrixPage } from "./pages/admin/SkillsMatrixPage";
 import { AbsencesPage } from "./pages/admin/AbsencesPage";
 import { StatsPage } from "./pages/admin/StatsPage";
 import { MyScheduleView } from "./pages/employee/MyScheduleView";
+import { SettingsPage } from "./pages/SettingsPage";
 
 function Home() {
   const { user } = useAuth();
@@ -106,6 +107,14 @@ export default function App() {
           element={
             <RequireAuth>
               <MyScheduleView />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/settings"
+          element={
+            <RequireAuth>
+              <SettingsPage />
             </RequireAuth>
           }
         />

@@ -10,6 +10,7 @@ import {
   ChevronDown,
   CalendarClock,
   BarChart3,
+  Settings,
 } from "lucide-react";
 import { useAuth } from "../auth/AuthContext";
 import { initials } from "../lib/initials";
@@ -33,10 +34,12 @@ const adminNavItems: NavItem[] = [
 
 const employeeNavItems: NavItem[] = [{ to: "/my-schedule", label: "Mon horaire", icon: CalendarClock }];
 
+const settingsNavItem: NavItem = { to: "/settings", label: "Réglages", icon: Settings };
+
 function Sidebar() {
   const { user, logout } = useAuth();
   if (!user) return null;
-  const items = user.role === "ADMIN" ? adminNavItems : employeeNavItems;
+  const items = [...(user.role === "ADMIN" ? adminNavItems : employeeNavItems), settingsNavItem];
 
   return (
     <aside className="flex h-screen w-64 shrink-0 flex-col bg-slate-900 text-slate-300">
