@@ -1,0 +1,133 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  // Postgres (déploiement partagé, 2026-07-19) — remplace le SQLite local utilisé pendant le développement.
+  // Les valeurs autorisées pour les champs "String" ci-dessous restent définies dans packages/shared/src/enums.ts
+  // (des enums natifs Postgres seraient possibles mais non nécessaires : aucun gain fonctionnel ici).
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Organization {
+  id        String   @id @default(cuid())
+  name      String
+  teamCode  String   @unique
+  createdAt DateTime @default(now())
+
+  users     User[]
+  tasks     Task[]
+}
+
+model User {
+  id             String   @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  name           String
+  email          String   @unique
+  passwordHash   String
+  role           String   @default("EMPLOYEE")
+  active         Boolean  @default(true)
+  hireDate       DateTime
+  createdAt      DateTime @default(now())
+
+  skills            EmployeeTaskSkill[] @relation("EmployeeSkills")
+  validatedSkills   EmployeeTaskSkill[] @relation("SkillValidator")
+  workSchedules     WorkSchedule[]
+  planningBlocks    PlanningBlock[]
+  absences          Absence[]           @relation("AbsentUser")
+  suggestedFor      Absence[]           @relation("SuggestedReplacement")
+  validatedAbsences Absence[]           @relation("AbsenceValidator")
+
+  @@index([organizationId])
+}
+
+model Task {
+  id                  String      @id @default(cuid())
+  organizationId      String
+  organization        Organization @relation(fields: [organizationId], references: [id])
+  name                String
+  description         String
+  category            String
+  allowedSlot         String      @default("ALL_DAY")
+  customStartTime     String?
+  customEndTime       String?
+  maxContinuousMinutes Int
+  minStaff            Int
+  targetStaff         Int
+  maxStaff            Int
+  maxTraineeSlots     Int         @default(0)
+  requiresTraining    Boolean     @default(true)
+  priorityRank        Int
+  createdAt           DateTime    @default(now())
+
+  skills          EmployeeTaskSkill[]
+  planningBlocks  PlanningBlock[]
+
+  @@unique([organizationId, priorityRank])
+  @@index([organizationId])
+}
+
+model EmployeeTaskSkill {
+  employeeId      String
+  employee        User        @relation("EmployeeSkills", fields: [employeeId], references: [id], onDelete: Cascade)
+  taskId          String
+  task            Task        @relation(fields: [taskId], references: [id])
+  status          String      @default("EN_FORMATION")
+  hoursCompleted  Float       @default(0)
+  hoursRequired   Float
+  validatedAt     DateTime?
+  validatedByUserId String?
+  validatedBy     User?       @relation("SkillValidator", fields: [validatedByUserId], references: [id], onDelete: SetNull)
+
+  @@id([employeeId, taskId])
+}
+
+model WorkSchedule {
+  id         String   @id @default(cuid())
+  employeeId String
+  employee   User     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  date       DateTime
+  startTime  String
+  endTime    String
+
+  @@unique([employeeId, date])
+  @@index([date])
+}
+
+model PlanningBlock {
+  id            String   @id @default(cuid())
+  employeeId    String
+  employee      User     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  taskId        String
+  task          Task     @relation(fields: [taskId], references: [id])
+  date          DateTime
+  startTime     String
+  endTime       String
+  source        String   @default("GENERATED")
+  justification String
+  isTraining    Boolean  @default(false)
+  trainerName   String?
+  needsRevalidation Boolean @default(false)
+
+  @@index([date])
+  @@index([employeeId, date])
+  @@index([taskId, date])
+}
+
+model Absence {
+  id                       String   @id @default(cuid())
+  employeeId               String
+  employee                 User     @relation("AbsentUser", fields: [employeeId], references: [id], onDelete: Cascade)
+  date                     DateTime
+  reason                   String?
+  status                   String   @default("PENDING")
+  suggestedReplacementUserId String?
+  suggestedReplacement     User?    @relation("SuggestedReplacement", fields: [suggestedReplacementUserId], references: [id], onDelete: SetNull)
+  validatedByUserId        String?
+  validatedBy              User?    @relation("AbsenceValidator", fields: [validatedByUserId], references: [id], onDelete: SetNull)
+  createdAt                DateTime @default(now())
+
+  @@index([employeeId, date])
+}
