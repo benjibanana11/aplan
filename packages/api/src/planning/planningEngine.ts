@@ -150,10 +150,8 @@ export function generatePlanning(context: DayContext): PlanningResult {
   }
   const assignedTasksToday = new Map<string, Set<string>>(context.employees.map((e) => [e.id, new Set()]));
 
-  const regularTasks = context.tasks.filter((t) => !t.isDefault);
-  const defaultTask = context.tasks.find((t) => t.isDefault);
-  const sortedTasks = [...regularTasks].sort((a, b) => a.priorityRank - b.priorityRank);
-  const effectiveTargets = applyCascade(regularTasks, context.employees.length);
+  const sortedTasks = [...context.tasks].sort((a, b) => a.priorityRank - b.priorityRank);
+  const effectiveTargets = applyCascade(context.tasks, context.employees.length);
   const slotBoundaries: SlotBoundaries = {
     morningEndMinutes: context.morningEndMinutes,
     afternoonEndMinutes: context.afternoonEndMinutes,
@@ -263,10 +261,11 @@ export function generatePlanning(context: DayContext): PlanningResult {
     }
   }
 
-  // Deuxième passe : temps restant -> une tâche déjà maîtrisée plutôt que directement la tâche par défaut.
-  // Un employé peut avoir plusieurs plages libres disjointes (ex: un créneau CUSTOM au milieu de la
-  // journée a laissé du temps libre avant ET après) ; on boucle jusqu'à ce qu'aucune tâche ne puisse
-  // plus combler aucune des plages restantes, pas juste la première trouvée.
+  // Deuxième passe : le temps restant est comblé par n'importe quelle tâche déjà maîtrisée,
+  // toujours par ordre de priorité. Un employé peut avoir plusieurs plages libres disjointes
+  // (ex: un créneau CUSTOM au milieu de la journée a laissé du temps libre avant ET après) ; on
+  // boucle jusqu'à ce qu'aucune tâche ne puisse plus combler aucune des plages restantes, pas
+  // juste la première trouvée.
   for (const employee of context.employees) {
     let progress = true;
     while (progress) {
@@ -291,33 +290,21 @@ export function generatePlanning(context: DayContext): PlanningResult {
     }
   }
 
-  // Tâche par défaut : absorbe tout reliquat (sur toutes les plages libres restantes), en respectant
-  // sa propre durée max continue et sa capacité.
-  const employeesWithoutDefault = new Set<string>();
+  // Toute tâche (y compris "Encodage") est désormais mise en concurrence normalement selon sa
+  // priorité, dans la passe principale et la deuxième passe ci-dessus — il n'y a plus de tâche
+  // "par défaut" traitée à part. S'il reste du temps non affecté après ces deux passes, c'est
+  // qu'aucune tâche (formation requise, capacité, créneau horaire...) ne pouvait l'occuper.
+  const employeesWithLeftoverTime = new Set<string>();
   for (const employee of context.employees) {
-    while (remaining.get(employee.id)!.length > 0) {
-      if (!defaultTask) {
-        employeesWithoutDefault.add(employee.id);
-        break;
-      }
-      const placed = tryAddBlock(
-        employee,
-        defaultTask,
-        staffOccupancy,
-        defaultTask.maxStaff,
-        "Tâche par défaut : aucune priorité restante pour ce créneau."
-      );
-      if (!placed) {
-        employeesWithoutDefault.add(employee.id);
-        break;
-      }
+    if (remaining.get(employee.id)!.length > 0) {
+      employeesWithLeftoverTime.add(employee.id);
     }
   }
-  if (employeesWithoutDefault.size > 0) {
+  if (employeesWithLeftoverTime.size > 0) {
     alerts.push({
       taskId: "",
       taskName: "—",
-      message: `Aucune tâche par défaut disponible (absente ou déjà à capacité maximale) : ${employeesWithoutDefault.size} employé(s) ont du temps non affecté.`,
+      message: `Aucune tâche disponible pour combler le temps restant : ${employeesWithLeftoverTime.size} employé(s) ont du temps non affecté.`,
     });
   }
 

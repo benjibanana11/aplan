@@ -197,7 +197,7 @@ describe("generatePlanning", () => {
 
   it("only assigns a MORNING task for the morning portion of the shift, routing the afternoon elsewhere", () => {
     const morningTask = makeTask({ id: "morning", priorityRank: 1, allowedSlot: "MORNING", targetStaff: 1, maxStaff: 1 });
-    const defaultTask = makeTask({ id: "default", priorityRank: 2, isDefault: true, requiresTraining: false, targetStaff: 0, maxStaff: 99 });
+    const defaultTask = makeTask({ id: "default", priorityRank: 2, requiresTraining: false, targetStaff: 0, maxStaff: 99 });
     const employee = makeEmployee({
       id: "e1",
       startMinutes: timeToMinutes("08:00"),
@@ -218,7 +218,7 @@ describe("generatePlanning", () => {
     expect(defaultBlock).toMatchObject({ startTime: "13:00", endTime: "16:00" });
   });
 
-  it("routes unassignable leftover time to the default task, and alerts when none is configured", () => {
+  it("alerts when no task at all is configured to absorb an employee's time", () => {
     const employee = makeEmployee({ id: "e1" });
     const context = makeContext({ employees: [employee], tasks: [] });
 
@@ -226,8 +226,29 @@ describe("generatePlanning", () => {
 
     expect(result.blocks).toHaveLength(0);
     expect(result.alerts).toContainEqual(
-      expect.objectContaining({ message: expect.stringContaining("Aucune tâche par défaut") })
+      expect.objectContaining({ message: expect.stringContaining("Aucune tâche disponible") })
     );
+  });
+
+  it("treats every task as a normal competitor at its own priority rank — no task is special-cased as an exclusive catch-all", () => {
+    // "encodage" used to be forced into a separate last-resort pass regardless of its priority
+    // rank. Now it must behave like any other task: if it's the highest-priority task an employee
+    // is trained on, it wins the slot even when a lower-priority task also has room.
+    const encodage = makeTask({ id: "encodage", name: "Encodage", priorityRank: 1, targetStaff: 1, maxStaff: 1 });
+    const reencodage = makeTask({ id: "reencodage", name: "Réencodage", priorityRank: 2, targetStaff: 1, maxStaff: 1 });
+    const employee = makeEmployee({
+      id: "e1",
+      skills: [
+        { taskId: "encodage", status: "FORME" },
+        { taskId: "reencodage", status: "FORME" },
+      ],
+    });
+    const context = makeContext({ employees: [employee], tasks: [encodage, reencodage] });
+
+    const result = generatePlanning(context);
+
+    const firstBlock = result.blocks.find((b) => b.startTime === "08:00");
+    expect(firstBlock?.taskId).toBe("encodage");
   });
 
   it("never exceeds maxStaff concurrently, even when many trained employees have leftover time to fall back into the task (regression: reported bug of 6 people on a maxStaff=1 task)", () => {
@@ -242,7 +263,6 @@ describe("generatePlanning", () => {
     const defaultTask = makeTask({
       id: "default",
       priorityRank: 2,
-      isDefault: true,
       requiresTraining: false,
       targetStaff: 0,
       maxStaff: 99,
@@ -277,7 +297,7 @@ describe("generatePlanning", () => {
 
   it("only assigns an AFTERNOON task within the afternoon window (between morning and evening boundaries)", () => {
     const afternoonTask = makeTask({ id: "afternoon", priorityRank: 1, allowedSlot: "AFTERNOON", targetStaff: 1, maxStaff: 1 });
-    const defaultTask = makeTask({ id: "default", priorityRank: 2, isDefault: true, requiresTraining: false, targetStaff: 0, maxStaff: 99 });
+    const defaultTask = makeTask({ id: "default", priorityRank: 2, requiresTraining: false, targetStaff: 0, maxStaff: 99 });
     const employee = makeEmployee({
       id: "e1",
       startMinutes: timeToMinutes("08:00"),
@@ -294,7 +314,7 @@ describe("generatePlanning", () => {
 
   it("only assigns an EVENING task after the afternoon boundary", () => {
     const eveningTask = makeTask({ id: "evening", priorityRank: 1, allowedSlot: "EVENING", targetStaff: 1, maxStaff: 1 });
-    const defaultTask = makeTask({ id: "default", priorityRank: 2, isDefault: true, requiresTraining: false, targetStaff: 0, maxStaff: 99 });
+    const defaultTask = makeTask({ id: "default", priorityRank: 2, requiresTraining: false, targetStaff: 0, maxStaff: 99 });
     const employee = makeEmployee({
       id: "e1",
       startMinutes: timeToMinutes("16:00"),
@@ -343,7 +363,7 @@ describe("generatePlanning", () => {
       targetStaff: 1,
       maxStaff: 1,
     });
-    const defaultTask = makeTask({ id: "default", priorityRank: 2, isDefault: true, requiresTraining: false, targetStaff: 0, maxStaff: 99 });
+    const defaultTask = makeTask({ id: "default", priorityRank: 2, requiresTraining: false, targetStaff: 0, maxStaff: 99 });
     // Shift starts at 09:30, so it never covers the full 09:00-10:00 custom window.
     const employee = makeEmployee({
       id: "e1",
@@ -370,7 +390,7 @@ describe("generatePlanning", () => {
       targetStaff: 2,
       maxStaff: 1,
     });
-    const defaultTask = makeTask({ id: "default", priorityRank: 2, isDefault: true, requiresTraining: false, targetStaff: 0, maxStaff: 99 });
+    const defaultTask = makeTask({ id: "default", priorityRank: 2, requiresTraining: false, targetStaff: 0, maxStaff: 99 });
     const employees = [
       makeEmployee({ id: "e1", startMinutes: timeToMinutes("08:00"), endMinutes: timeToMinutes("16:00") }),
       makeEmployee({ id: "e2", startMinutes: timeToMinutes("08:00"), endMinutes: timeToMinutes("16:00") }),
@@ -395,16 +415,13 @@ describe("generatePlanning", () => {
       targetStaff: 1,
       maxStaff: 1,
     });
-    const defaultTask = makeTask({
-      id: "default",
-      priorityRank: 2,
-      isDefault: true,
-      requiresTraining: false,
-      targetStaff: 0,
-      maxStaff: 99,
-    });
+    // Two ordinary catch-all-ish tasks, not one: now that every task (including a former "default")
+    // is capped at one block per employee per day like any other, filling both the before AND after
+    // segments left by the CUSTOM block needs two distinct tasks in the roster.
+    const before = makeTask({ id: "before", priorityRank: 2, requiresTraining: false, targetStaff: 0, maxStaff: 99 });
+    const after = makeTask({ id: "after", priorityRank: 3, requiresTraining: false, targetStaff: 0, maxStaff: 99 });
     const employee = makeEmployee({ id: "e1", startMinutes: timeToMinutes("08:00"), endMinutes: timeToMinutes("16:00") });
-    const context = makeContext({ employees: [employee], tasks: [customTask, defaultTask] });
+    const context = makeContext({ employees: [employee], tasks: [customTask, before, after] });
 
     const result = generatePlanning(context);
 
@@ -431,7 +448,6 @@ describe("generatePlanning", () => {
     const defaultTask = makeTask({
       id: "default",
       priorityRank: 2,
-      isDefault: true,
       requiresTraining: false,
       targetStaff: 0,
       maxStaff: 99,

@@ -6,7 +6,6 @@ import type { DayContext, EmployeeContext, EquityStats, TaskContext } from "./ty
 const EQUITY_WINDOW_DAYS = 30;
 const MORNING_END_TIME = "13:00";
 const AFTERNOON_END_TIME = "18:00";
-const DEFAULT_TASK_NAME = "encodage";
 
 export async function loadDayContext(organizationId: string, date: string): Promise<DayContext> {
   const dayStart = parseDateOnly(date);
@@ -117,7 +116,6 @@ export async function loadDayContext(organizationId: string, date: string): Prom
     maxStaff: task.maxStaff,
     maxTraineeSlots: task.maxTraineeSlots,
     requiresTraining: task.requiresTraining,
-    isDefault: task.name.trim().toLowerCase() === DEFAULT_TASK_NAME,
   }));
 
   return {

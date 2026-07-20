@@ -14,7 +14,6 @@ export function makeTask(overrides: Partial<TaskContext> & { id: string; priorit
     maxStaff: 10,
     maxTraineeSlots: 0,
     requiresTraining: true,
-    isDefault: false,
     ...overrides,
   };
 }

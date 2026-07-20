@@ -27,7 +27,6 @@ export interface TaskContext {
   maxStaff: number;
   maxTraineeSlots: number;
   requiresTraining: boolean;
-  isDefault: boolean;
 }
 
 export interface EquityStats {
