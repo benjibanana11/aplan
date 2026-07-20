@@ -3,6 +3,7 @@ import "express-async-errors";
 import express from "express";
 import cors from "cors";
 import session from "express-session";
+import connectPgSimple from "connect-pg-simple";
 import { authRouter } from "./routes/auth.js";
 import { employeesRouter } from "./routes/employees.js";
 import { schedulesRouter } from "./routes/schedules.js";
@@ -25,8 +26,19 @@ app.use(
   })
 );
 app.use(express.json());
+
+// MemoryStore (le défaut d'express-session) perd toutes les sessions à chaque redémarrage du
+// process — un vrai problème sur Render, dont le plan gratuit met le service en veille après
+// inactivité (donc redémarre à chaque réveil) : tout le monde serait déconnecté en permanence.
+// On stocke les sessions dans la même base Postgres dès qu'une connexion est disponible.
+const PgSession = connectPgSimple(session);
+const sessionStore = process.env.DATABASE_URL
+  ? new PgSession({ conString: process.env.DATABASE_URL, createTableIfMissing: true })
+  : undefined;
+
 app.use(
   session({
+    store: sessionStore,
     secret: process.env.SESSION_SECRET ?? "dev-only-secret-change-me",
     resave: false,
     saveUninitialized: false,
