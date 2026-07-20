@@ -9,7 +9,7 @@ services:
     runtime: node
     plan: free
     rootDir: .
-    buildCommand: npm install && npm run build:shared && npm run build --workspace packages/api && npx prisma db push --schema packages/api/prisma/schema.prisma --accept-data-loss
+    buildCommand: npm install --include=dev && npm run build:shared && npm run build --workspace packages/api && npx prisma db push --schema packages/api/prisma/schema.prisma --accept-data-loss
     startCommand: node packages/api/dist/index.js
     envVars:
       - key: NODE_ENV
@@ -30,7 +30,7 @@ services:
     name: aplan-web
     runtime: static
     rootDir: .
-    buildCommand: npm install && npm run build:shared && npm run build --workspace packages/web
+    buildCommand: npm install --include=dev && npm run build:shared && npm run build --workspace packages/web
     staticPublishPath: packages/web/dist
     envVars:
       - key: VITE_API_URL
