@@ -33,7 +33,13 @@ app.use(express.json());
 // On stocke les sessions dans la même base Postgres dès qu'une connexion est disponible.
 const PgSession = connectPgSimple(session);
 const sessionStore = process.env.DATABASE_URL
-  ? new PgSession({ conString: process.env.DATABASE_URL, createTableIfMissing: true })
+  ? new PgSession({
+      // Render (et la plupart des Postgres hébergés) exigent TLS sur les connexions externes ;
+      // le pilote "pg" sous-jacent ne le négocie pas tout seul comme le fait Prisma, il faut le
+      // demander explicitement (via conObject, pas conString) sinon la connexion échoue avec ECONNRESET.
+      conObject: { connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } },
+      createTableIfMissing: true,
+    })
   : undefined;
 
 app.use(

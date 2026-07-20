@@ -8,7 +8,10 @@
     "rootDir": "src",
     "strict": true,
     "esModuleInterop": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    // Isole ce package des @types/* hoistés par les workspaces npm (ex: @types/connect-pg-simple,
+    // ajouté pour packages/api) : shared n'a aucune dépendance Node et ne doit rien en absorber.
+    "types": []
   },
   "include": ["src"]
 }
