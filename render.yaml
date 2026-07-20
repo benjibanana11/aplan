@@ -29,7 +29,6 @@ services:
   - type: web
     name: aplan-web
     runtime: static
-    plan: free
     rootDir: .
     buildCommand: npm install && npm run build:shared && npm run build --workspace packages/web
     staticPublishPath: packages/web/dist
