@@ -10,21 +10,6 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model Organization {
-  id        String   @id @default(cuid())
-  name      String
-  teamCode  String   @unique
-  createdAt DateTime @default(now())
-
-  users           User[]
-  tasks           Task[]
-  schedulePresets SchedulePreset[]
-}
-
-// --- Multi-entreprises / multi-équipes (en cours de migration, voir le plan associé) ---
-// Company/Team/TeamMembership remplaceront Organization + User.organizationId/role/active à
-// terme. Pendant la migration, les deux modèles coexistent : Organization reste la source de
-// vérité tant que le backfill (script one-off) et la bascule du code applicatif n'ont pas eu lieu.
 model Company {
   id        String   @id @default(cuid())
   name      String
@@ -67,16 +52,9 @@ model TeamMembership {
 
 model User {
   id             String   @id @default(cuid())
-  // Nullable : les nouveaux comptes créés après la bascule vers Company/Team (voir TeamMembership
-  // ci-dessus) n'ont plus d'Organization directe. Champ conservé jusqu'au nettoyage différé du
-  // schéma (Étape D du plan) pour ne pas perdre l'historique des comptes créés avant la bascule.
-  organizationId String?
-  organization   Organization? @relation(fields: [organizationId], references: [id])
   name           String
   email          String   @unique
   passwordHash   String
-  role           String   @default("EMPLOYEE")
-  active         Boolean  @default(true)
   hireDate       DateTime
   createdAt      DateTime @default(now())
   // Accès plateforme, indépendant du rôle par équipe (TeamMembership.role) : peut créer/voir
@@ -92,16 +70,12 @@ model User {
   absences          Absence[]           @relation("AbsentUser")
   suggestedFor      Absence[]           @relation("SuggestedReplacement")
   validatedAbsences Absence[]           @relation("AbsenceValidator")
-
-  @@index([organizationId])
 }
 
 model Task {
   id                  String      @id @default(cuid())
-  organizationId      String?
-  organization        Organization? @relation(fields: [organizationId], references: [id])
-  teamId              String?
-  team                Team?       @relation(fields: [teamId], references: [id])
+  teamId              String
+  team                Team        @relation(fields: [teamId], references: [id])
   name                String
   description         String
   category            String
@@ -120,9 +94,7 @@ model Task {
   skills          EmployeeTaskSkill[]
   planningBlocks  PlanningBlock[]
 
-  @@unique([organizationId, priorityRank])
   @@unique([teamId, priorityRank])
-  @@index([organizationId])
   @@index([teamId])
 }
 
@@ -131,8 +103,8 @@ model EmployeeTaskSkill {
   employee        User        @relation("EmployeeSkills", fields: [employeeId], references: [id], onDelete: Cascade)
   taskId          String
   task            Task        @relation(fields: [taskId], references: [id])
-  teamId          String?
-  team            Team?       @relation(fields: [teamId], references: [id])
+  teamId          String
+  team            Team        @relation(fields: [teamId], references: [id])
   status          String      @default("EN_FORMATION")
   hoursCompleted  Float       @default(0)
   hoursRequired   Float
@@ -148,8 +120,8 @@ model WorkSchedule {
   id         String   @id @default(cuid())
   employeeId String
   employee   User     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  teamId     String?
-  team       Team?    @relation(fields: [teamId], references: [id])
+  teamId     String
+  team       Team     @relation(fields: [teamId], references: [id])
   date       DateTime
   startTime  String
   endTime    String
@@ -165,8 +137,8 @@ model PlanningBlock {
   employee      User     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   taskId        String
   task          Task     @relation(fields: [taskId], references: [id])
-  teamId        String?
-  team          Team?    @relation(fields: [teamId], references: [id])
+  teamId        String
+  team          Team     @relation(fields: [teamId], references: [id])
   date          DateTime
   startTime     String
   endTime       String
@@ -198,17 +170,13 @@ model Session {
 // en un clic sur la page Horaire, pour accélérer la saisie répétitive des horaires mensuels.
 model SchedulePreset {
   id             String       @id @default(cuid())
-  organizationId String?
-  organization   Organization? @relation(fields: [organizationId], references: [id])
-  teamId         String?
-  team           Team?        @relation(fields: [teamId], references: [id])
+  teamId         String
+  team           Team         @relation(fields: [teamId], references: [id])
   startTime      String
   endTime        String
   createdAt      DateTime     @default(now())
 
-  @@unique([organizationId, startTime, endTime])
   @@unique([teamId, startTime, endTime])
-  @@index([organizationId])
   @@index([teamId])
 }
 
@@ -216,8 +184,8 @@ model Absence {
   id                       String   @id @default(cuid())
   employeeId               String
   employee                 User     @relation("AbsentUser", fields: [employeeId], references: [id], onDelete: Cascade)
-  teamId                   String?
-  team                     Team?    @relation(fields: [teamId], references: [id])
+  teamId                   String
+  team                     Team     @relation(fields: [teamId], references: [id])
   date                     DateTime
   reason                   String?
   status                   String   @default("PENDING")
