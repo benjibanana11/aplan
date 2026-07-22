@@ -16,8 +16,9 @@ model Organization {
   teamCode  String   @unique
   createdAt DateTime @default(now())
 
-  users     User[]
-  tasks     Task[]
+  users           User[]
+  tasks           Task[]
+  schedulePresets SchedulePreset[]
 }
 
 model User {
@@ -114,6 +115,32 @@ model PlanningBlock {
   @@index([date])
   @@index([employeeId, date])
   @@index([taskId, date])
+}
+
+// Table de sessions gérée par connect-pg-simple (packages/api/src/index.ts), pas par l'app elle-même
+// — déclarée ici uniquement pour que `prisma db push` ne la prenne pas pour une table orpheline et
+// ne tente pas de la supprimer (ce qui déconnecterait tout le monde).
+model Session {
+  sid    String   @id @db.VarChar
+  sess   Json
+  expire DateTime @db.Timestamp(6)
+
+  @@index([expire], name: "IDX_session_expire")
+  @@map("session")
+}
+
+// Créneaux horaires génériques ("6h-14h", "9h-17h"...) que l'admin définit une fois et réutilise
+// en un clic sur la page Horaire, pour accélérer la saisie répétitive des horaires mensuels.
+model SchedulePreset {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id])
+  startTime      String
+  endTime        String
+  createdAt      DateTime     @default(now())
+
+  @@unique([organizationId, startTime, endTime])
+  @@index([organizationId])
 }
 
 model Absence {

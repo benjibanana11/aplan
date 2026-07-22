@@ -9,6 +9,7 @@ import { Table, Thead, Tbody, Tr, Th, Td } from "../../components/Table";
 import { inputClass, labelClass } from "../../components/formStyles";
 import { currentMonth, daysInMonth, isWeekend, weekdayLetter } from "../../lib/dates";
 import { formatTimeCompact } from "../../lib/time";
+import { SchedulePresetsPanel, useSchedulePresets } from "./SchedulePresetsPanel";
 
 interface Employee {
   id: string;
@@ -41,6 +42,7 @@ export function HoraireMatrixPage() {
     queryKey: ["employees"],
     queryFn: () => api.get<Employee[]>("/employees"),
   });
+  const { data: presets } = useSchedulePresets();
   const { data, isLoading: loadingSchedule } = useQuery({
     queryKey: ["schedules-month", month],
     queryFn: () => api.get<{ entries: ScheduleEntry[]; absences: AbsenceEntry[] }>(`/schedules?month=${month}`),
@@ -85,6 +87,13 @@ export function HoraireMatrixPage() {
     setEndTimeInput(existing?.endTime ?? "16:00");
   }
 
+  function applyPreset(startTime: string, endTime: string) {
+    if (!selected) return;
+    setStartTimeInput(startTime);
+    setEndTimeInput(endTime);
+    saveDay.mutate({ employeeId: selected.employeeId, date: selected.date, startTime, endTime });
+  }
+
   const isLoading = loadingEmployees || loadingSchedule;
 
   return (
@@ -99,6 +108,10 @@ export function HoraireMatrixPage() {
           </label>
         }
       />
+
+      <div className="mb-6">
+        <SchedulePresetsPanel />
+      </div>
 
       <div className="flex items-start gap-6">
         <div className="min-w-0 flex-1">
@@ -187,6 +200,24 @@ export function HoraireMatrixPage() {
                       ? ` : ${absenceFor(selected.employeeId, selected.date)?.reason}`
                       : "."}
                   </p>
+                )}
+                {presets && presets.length > 0 && (
+                  <div>
+                    <span className="mb-1.5 block text-sm font-medium text-slate-700">Heures de base</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {presets.map((preset) => (
+                        <button
+                          key={preset.id}
+                          type="button"
+                          onClick={() => applyPreset(preset.startTime, preset.endTime)}
+                          disabled={saveDay.isPending}
+                          className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
+                        >
+                          {formatTimeCompact(preset.startTime)}-{formatTimeCompact(preset.endTime)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 )}
                 <label className={labelClass}>
                   Début

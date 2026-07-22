@@ -7,6 +7,7 @@ import connectPgSimple from "connect-pg-simple";
 import { authRouter } from "./routes/auth.js";
 import { employeesRouter } from "./routes/employees.js";
 import { schedulesRouter } from "./routes/schedules.js";
+import { schedulePresetsRouter } from "./routes/schedulePresets.js";
 import { tasksRouter } from "./routes/tasks.js";
 import { planningRouter } from "./routes/planning.js";
 import { skillsRouter } from "./routes/skills.js";
@@ -63,6 +64,7 @@ app.use(
 app.use("/auth", authRouter);
 app.use("/employees", employeesRouter);
 app.use("/schedules", schedulesRouter);
+app.use("/schedule-presets", schedulePresetsRouter);
 app.use("/tasks", tasksRouter);
 app.use("/planning", planningRouter);
 app.use("/skills", skillsRouter);

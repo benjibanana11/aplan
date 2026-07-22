@@ -18,3 +18,14 @@ export const upsertScheduleDaySchema = z.object({
   endTime: timeString,
 });
 export type UpsertScheduleDayInput = z.infer<typeof upsertScheduleDaySchema>;
+
+export const schedulePresetSchema = z
+  .object({
+    startTime: timeString,
+    endTime: timeString,
+  })
+  .refine((data) => data.startTime < data.endTime, {
+    message: "L'heure de fin doit être après l'heure de début",
+    path: ["endTime"],
+  });
+export type SchedulePresetInput = z.infer<typeof schedulePresetSchema>;
