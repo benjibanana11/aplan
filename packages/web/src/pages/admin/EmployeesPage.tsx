@@ -178,7 +178,7 @@ export function EmployeesPage() {
         </div>
 
         {creating && (
-          <div className="w-96 shrink-0">
+          <div className="sticky top-6 w-96 shrink-0 self-start">
             <Card
               title="Nouvel employé"
               actions={
@@ -202,7 +202,7 @@ export function EmployeesPage() {
         )}
 
         {editing && (
-          <div className="w-96 shrink-0">
+          <div className="sticky top-6 w-96 shrink-0 self-start">
             <Card
               title={`Modifier ${editing.name}`}
               actions={
