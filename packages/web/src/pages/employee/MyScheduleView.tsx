@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Users } from "lucide-react";
 import { api } from "../../api/client";
@@ -8,6 +8,8 @@ import { Card } from "../../components/Card";
 import { Table, Thead, Tbody, Tr, Th, Td } from "../../components/Table";
 import { inputClass } from "../../components/formStyles";
 import { PlanningTimeline } from "../../components/PlanningTimeline";
+import { currentMonth, isWeekend, today, weeksInMonth } from "../../lib/dates";
+import { formatTimeCompact } from "../../lib/time";
 
 interface WorkScheduleEntry {
   date: string;
@@ -36,15 +38,7 @@ interface TaskOption {
   name: string;
 }
 
-function currentMonth() {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-}
-
-function today() {
-  const now = new Date();
-  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-}
+const WEEKDAY_LABELS = ["Lun", "Mar", "Mer", "Jeu", "Ven", "Sam", "Dim"];
 
 export function MyScheduleView() {
   const { user } = useAuth();
@@ -74,6 +68,15 @@ export function MyScheduleView() {
 
   const myBlocksToday = planningToday?.filter((b) => b.employeeId === user?.id) ?? [];
 
+  const weeks = useMemo(() => weeksInMonth(month), [month]);
+  const entryByDate = useMemo(() => {
+    const map = new Map<string, WorkScheduleEntry>();
+    for (const entry of myEntries ?? []) {
+      map.set(entry.date.slice(0, 10), entry);
+    }
+    return map;
+  }, [myEntries]);
+
   return (
     <div>
       <PageHeader
@@ -87,25 +90,36 @@ export function MyScheduleView() {
       />
 
       <Card title="Mes horaires du mois">
-        <div className="max-h-72 overflow-y-auto">
-          <Table>
-            <Thead>
-              <Tr>
-                <Th>Date</Th>
-                <Th>Début</Th>
-                <Th>Fin</Th>
-              </Tr>
-            </Thead>
-            <Tbody>
-              {myEntries?.map((entry) => (
-                <Tr key={entry.date}>
-                  <Td>{entry.date.slice(0, 10)}</Td>
-                  <Td>{entry.startTime}</Td>
-                  <Td>{entry.endTime}</Td>
-                </Tr>
-              ))}
-            </Tbody>
-          </Table>
+        <div className="grid grid-cols-7 gap-1.5">
+          {WEEKDAY_LABELS.map((label) => (
+            <div key={label} className="text-center text-xs font-semibold text-slate-400 uppercase">
+              {label}
+            </div>
+          ))}
+          {weeks.map((week, weekIndex) =>
+            week.map((day, dayIndex) => {
+              if (!day) return <div key={`${weekIndex}-${dayIndex}`} />;
+              const entry = entryByDate.get(day);
+              const isToday = day === date;
+              return (
+                <div
+                  key={day}
+                  className={`flex min-h-[4.5rem] flex-col rounded-lg border p-2 ${
+                    isWeekend(day) ? "bg-slate-50" : "bg-white"
+                  } ${isToday ? "border-blue-400 ring-1 ring-blue-400" : "border-slate-200"}`}
+                >
+                  <span className="text-xs font-medium text-slate-500">{Number(day.slice(-2))}</span>
+                  {entry ? (
+                    <span className="mt-1 self-start rounded bg-blue-50 px-1.5 py-1 text-xs font-medium text-blue-700">
+                      {formatTimeCompact(entry.startTime)}-{formatTimeCompact(entry.endTime)}
+                    </span>
+                  ) : (
+                    <span className="mt-1 text-xs text-slate-300">—</span>
+                  )}
+                </div>
+              );
+            })
+          )}
         </div>
       </Card>
 
