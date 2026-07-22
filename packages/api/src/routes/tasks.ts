@@ -7,7 +7,7 @@ export const tasksRouter = Router();
 
 tasksRouter.get("/", requireAuth, async (req, res) => {
   const tasks = await prisma.task.findMany({
-    where: { organizationId: req.session.organizationId },
+    where: { teamId: req.session.teamId },
     orderBy: { priorityRank: "asc" },
   });
   res.json(tasks);
@@ -20,16 +20,16 @@ tasksRouter.post("/", requireAdmin, async (req, res) => {
     return;
   }
 
-  const organizationId = req.session.organizationId!;
+  const teamId = req.session.teamId!;
   const task = await prisma.$transaction(async (tx) => {
     const maxRank = await tx.task.aggregate({
-      where: { organizationId },
+      where: { teamId },
       _max: { priorityRank: true },
     });
     return tx.task.create({
       data: {
         ...parsed.data,
-        organizationId,
+        teamId,
         priorityRank: (maxRank._max.priorityRank ?? 0) + 1,
       },
     });
@@ -45,7 +45,7 @@ tasksRouter.put("/:id", requireAdmin, async (req, res) => {
   }
 
   const existing = await prisma.task.findFirst({
-    where: { id: req.params.id, organizationId: req.session.organizationId },
+    where: { id: req.params.id, teamId: req.session.teamId },
   });
   if (!existing) {
     res.status(404).json({ error: "Tâche introuvable" });
@@ -58,7 +58,7 @@ tasksRouter.put("/:id", requireAdmin, async (req, res) => {
 
 tasksRouter.delete("/:id", requireAdmin, async (req, res) => {
   const existing = await prisma.task.findFirst({
-    where: { id: req.params.id, organizationId: req.session.organizationId },
+    where: { id: req.params.id, teamId: req.session.teamId },
   });
   if (!existing) {
     res.status(404).json({ error: "Tâche introuvable" });
@@ -77,16 +77,17 @@ tasksRouter.patch("/reorder", requireAdmin, async (req, res) => {
   }
 
   const { orderedIds } = parsed.data;
-  const orgTasks = await prisma.task.findMany({
-    where: { organizationId: req.session.organizationId, id: { in: orderedIds } },
+  const teamId = req.session.teamId;
+  const teamTasks = await prisma.task.findMany({
+    where: { teamId, id: { in: orderedIds } },
     select: { id: true },
   });
-  if (orgTasks.length !== orderedIds.length) {
+  if (teamTasks.length !== orderedIds.length) {
     res.status(400).json({ error: "Liste de tâches invalide" });
     return;
   }
 
-  // Deux passes pour éviter de violer @@unique([organizationId, priorityRank])
+  // Deux passes pour éviter de violer @@unique([teamId, priorityRank])
   // le temps du réordonnancement (SQLite ne supporte pas les contraintes différées).
   await prisma.$transaction([
     ...orderedIds.map((id, index) => prisma.task.update({ where: { id }, data: { priorityRank: -(index + 1) } })),
@@ -94,7 +95,7 @@ tasksRouter.patch("/reorder", requireAdmin, async (req, res) => {
   ]);
 
   const tasks = await prisma.task.findMany({
-    where: { organizationId: req.session.organizationId },
+    where: { teamId },
     orderBy: { priorityRank: "asc" },
   });
   res.json(tasks);

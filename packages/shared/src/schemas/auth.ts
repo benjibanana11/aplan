@@ -19,3 +19,13 @@ export const changePasswordSchema = z.object({
   newPassword: z.string().min(8, "Nouveau mot de passe : 8 caractères minimum"),
 });
 export type ChangePasswordInput = z.infer<typeof changePasswordSchema>;
+
+export const selectTeamSchema = z.object({
+  teamId: z.string().min(1, "Équipe requise"),
+});
+export type SelectTeamInput = z.infer<typeof selectTeamSchema>;
+
+export const switchTeamSchema = z.object({
+  teamId: z.string().min(1, "Équipe requise"),
+});
+export type SwitchTeamInput = z.infer<typeof switchTeamSchema>;

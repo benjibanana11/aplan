@@ -1,10 +1,65 @@
-import { Router } from "express";
+import { Router, type Request } from "express";
 import bcrypt from "bcrypt";
-import { registerSchema, loginSchema, changePasswordSchema, type Role } from "@aplan/shared";
+import {
+  registerSchema,
+  loginSchema,
+  changePasswordSchema,
+  selectTeamSchema,
+  switchTeamSchema,
+  type Role,
+} from "@aplan/shared";
 import { prisma } from "../db.js";
 import { requireAuth } from "../middleware/requireAuth.js";
 
 export const authRouter = Router();
+
+interface TeamOption {
+  companyId: string;
+  companyName: string;
+  teamId: string;
+  teamName: string;
+  role: Role;
+}
+
+async function activeTeamOptions(userId: string): Promise<TeamOption[]> {
+  const memberships = await prisma.teamMembership.findMany({
+    where: { userId, active: true },
+    include: { team: { include: { company: true } } },
+  });
+  return memberships.map((m) => ({
+    companyId: m.team.companyId,
+    companyName: m.team.company.name,
+    teamId: m.teamId,
+    teamName: m.team.name,
+    role: m.role as Role,
+  }));
+}
+
+function currentUserPayload(
+  user: { id: string; name: string; email: string },
+  team: TeamOption,
+  teams: TeamOption[]
+) {
+  return {
+    id: user.id,
+    name: user.name,
+    email: user.email,
+    role: team.role,
+    companyId: team.companyId,
+    companyName: team.companyName,
+    teamId: team.teamId,
+    teamName: team.teamName,
+    teams,
+  };
+}
+
+function finalizeSession(session: Request["session"], userId: string, team: TeamOption) {
+  session.userId = userId;
+  session.role = team.role;
+  session.companyId = team.companyId;
+  session.teamId = team.teamId;
+  session.pendingUserId = undefined;
+}
 
 authRouter.post("/register", async (req, res) => {
   const parsed = registerSchema.safeParse(req.body);
@@ -14,8 +69,8 @@ authRouter.post("/register", async (req, res) => {
   }
   const { teamCode, name, email, password } = parsed.data;
 
-  const organization = await prisma.organization.findUnique({ where: { teamCode } });
-  if (!organization) {
+  const team = await prisma.team.findUnique({ where: { teamCode }, include: { company: true } });
+  if (!team) {
     res.status(400).json({ error: "Code d'équipe invalide" });
     return;
   }
@@ -28,20 +83,21 @@ authRouter.post("/register", async (req, res) => {
 
   const passwordHash = await bcrypt.hash(password, 12);
   const user = await prisma.user.create({
-    data: {
-      organizationId: organization.id,
-      name,
-      email,
-      passwordHash,
-      role: "EMPLOYEE",
-      hireDate: new Date(),
-    },
+    data: { name, email, passwordHash, hireDate: new Date() },
+  });
+  await prisma.teamMembership.create({
+    data: { userId: user.id, teamId: team.id, role: "EMPLOYEE", active: true },
   });
 
-  req.session.userId = user.id;
-  req.session.role = user.role as Role;
-  req.session.organizationId = user.organizationId;
-  res.status(201).json({ id: user.id, name: user.name, email: user.email, role: user.role });
+  const teamOption: TeamOption = {
+    companyId: team.companyId,
+    companyName: team.company.name,
+    teamId: team.id,
+    teamName: team.name,
+    role: "EMPLOYEE",
+  };
+  finalizeSession(req.session, user.id, teamOption);
+  res.status(201).json(currentUserPayload(user, teamOption, [teamOption]));
 });
 
 authRouter.post("/login", async (req, res) => {
@@ -53,7 +109,7 @@ authRouter.post("/login", async (req, res) => {
   const { email, password } = parsed.data;
 
   const user = await prisma.user.findUnique({ where: { email } });
-  if (!user || !user.active) {
+  if (!user) {
     res.status(401).json({ error: "Identifiants invalides" });
     return;
   }
@@ -63,10 +119,64 @@ authRouter.post("/login", async (req, res) => {
     return;
   }
 
-  req.session.userId = user.id;
-  req.session.role = user.role as Role;
-  req.session.organizationId = user.organizationId;
-  res.json({ id: user.id, name: user.name, email: user.email, role: user.role });
+  const teams = await activeTeamOptions(user.id);
+  if (teams.length === 0) {
+    res.status(401).json({ error: "Ce compte n'est actif sur aucune équipe" });
+    return;
+  }
+
+  if (teams.length === 1) {
+    finalizeSession(req.session, user.id, teams[0]);
+    res.json(currentUserPayload(user, teams[0], teams));
+    return;
+  }
+
+  req.session.pendingUserId = user.id;
+  res.json({ needsTeamSelection: true, teams });
+});
+
+authRouter.post("/select-team", async (req, res) => {
+  const parsed = selectTeamSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+  if (!req.session.pendingUserId) {
+    res.status(401).json({ error: "Non authentifié" });
+    return;
+  }
+
+  const userId = req.session.pendingUserId;
+  const teams = await activeTeamOptions(userId);
+  const team = teams.find((t) => t.teamId === parsed.data.teamId);
+  if (!team) {
+    res.status(403).json({ error: "Équipe invalide pour ce compte" });
+    return;
+  }
+
+  const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
+  finalizeSession(req.session, userId, team);
+  res.json(currentUserPayload(user, team, teams));
+});
+
+authRouter.post("/switch-team", requireAuth, async (req, res) => {
+  const parsed = switchTeamSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+
+  const userId = req.session.userId!;
+  const teams = await activeTeamOptions(userId);
+  const team = teams.find((t) => t.teamId === parsed.data.teamId);
+  if (!team) {
+    res.status(403).json({ error: "Équipe invalide pour ce compte" });
+    return;
+  }
+
+  const user = await prisma.user.findUniqueOrThrow({ where: { id: userId } });
+  finalizeSession(req.session, userId, team);
+  res.json(currentUserPayload(user, team, teams));
 });
 
 authRouter.post("/logout", (req, res) => {
@@ -101,14 +211,21 @@ authRouter.post("/change-password", requireAuth, async (req, res) => {
 });
 
 authRouter.get("/me", async (req, res) => {
-  if (!req.session.userId) {
+  if (!req.session.userId || !req.session.teamId) {
     res.status(401).json({ error: "Non authentifié" });
     return;
   }
-  const user = await prisma.user.findUnique({ where: { id: req.session.userId } });
-  if (!user) {
+
+  const [user, teams] = await Promise.all([
+    prisma.user.findUnique({ where: { id: req.session.userId } }),
+    activeTeamOptions(req.session.userId),
+  ]);
+  const currentTeam = teams.find((t) => t.teamId === req.session.teamId);
+  if (!user || !currentTeam) {
+    req.session.destroy(() => {});
     res.status(401).json({ error: "Non authentifié" });
     return;
   }
-  res.json({ id: user.id, name: user.name, email: user.email, role: user.role });
+
+  res.json(currentUserPayload(user, currentTeam, teams));
 });

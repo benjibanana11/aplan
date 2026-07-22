@@ -7,7 +7,7 @@ const EQUITY_WINDOW_DAYS = 30;
 const MORNING_END_TIME = "13:00";
 const AFTERNOON_END_TIME = "18:00";
 
-export async function loadDayContext(organizationId: string, date: string): Promise<DayContext> {
+export async function loadDayContext(teamId: string, date: string): Promise<DayContext> {
   const dayStart = parseDateOnly(date);
   const dayEnd = new Date(dayStart);
   dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
@@ -18,25 +18,31 @@ export async function loadDayContext(organizationId: string, date: string): Prom
 
   const [schedules, tasks, skills, yesterdayBlocks, equityBlocks, absences] = await Promise.all([
     prisma.workSchedule.findMany({
-      where: { date: { gte: dayStart, lt: dayEnd }, employee: { organizationId, active: true } },
+      // "active" vit désormais sur TeamMembership (par équipe), pas sur User — un employé peut
+      // être actif sur une équipe et pas une autre.
+      where: {
+        date: { gte: dayStart, lt: dayEnd },
+        teamId,
+        employee: { memberships: { some: { teamId, active: true } } },
+      },
       include: { employee: { select: { id: true, name: true } } },
     }),
-    prisma.task.findMany({ where: { organizationId } }),
+    prisma.task.findMany({ where: { teamId } }),
     prisma.employeeTaskSkill.findMany({
-      where: { task: { organizationId } },
+      where: { teamId },
       select: { employeeId: true, taskId: true, status: true },
     }),
     prisma.planningBlock.findMany({
-      where: { date: { gte: yesterdayStart, lt: dayStart }, task: { organizationId } },
+      where: { date: { gte: yesterdayStart, lt: dayStart }, teamId },
       select: { employeeId: true, taskId: true },
     }),
     prisma.planningBlock.findMany({
-      where: { date: { gte: equityWindowStart, lt: dayStart }, task: { organizationId } },
+      where: { date: { gte: equityWindowStart, lt: dayStart }, teamId },
       select: { employeeId: true, taskId: true, date: true },
     }),
     // Une absence REJECTED n'exclut personne (la personne est bien présente) ; PENDING et VALIDATED oui.
     prisma.absence.findMany({
-      where: { date: { gte: dayStart, lt: dayEnd }, employee: { organizationId }, status: { not: "REJECTED" } },
+      where: { date: { gte: dayStart, lt: dayEnd }, teamId, status: { not: "REJECTED" } },
       select: { employeeId: true },
     }),
   ]);

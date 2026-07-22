@@ -14,7 +14,7 @@ absencesRouter.post("/", requireAuth, async (req, res) => {
     res.status(400).json({ error: parsed.error.flatten() });
     return;
   }
-  const organizationId = req.session.organizationId!;
+  const teamId = req.session.teamId!;
   const { employeeId, date, reason } = parsed.data;
 
   if (req.session.role !== "ADMIN" && req.session.userId !== employeeId) {
@@ -22,21 +22,21 @@ absencesRouter.post("/", requireAuth, async (req, res) => {
     return;
   }
 
-  const employee = await prisma.user.findFirst({ where: { id: employeeId, organizationId } });
-  if (!employee) {
+  const membership = await prisma.teamMembership.findFirst({ where: { userId: employeeId, teamId } });
+  if (!membership) {
     res.status(404).json({ error: "Employé introuvable" });
     return;
   }
 
   const absence = await prisma.absence.create({
-    data: { employeeId, date: parseDateOnly(date), reason },
+    data: { employeeId, teamId, date: parseDateOnly(date), reason },
   });
 
   // Si un planning existait déjà pour ce jour (généré ou validé), le recalculer immédiatement en
   // excluant l'employé absent — le planning repasse alors "à valider" (voir needsRevalidation).
-  const recalculated = await recalculateDayIfPlanned(organizationId, date);
+  const recalculated = await recalculateDayIfPlanned(teamId, date);
 
-  const suggestions = recalculated ? [] : await suggestReplacements(organizationId, employeeId, date);
+  const suggestions = recalculated ? [] : await suggestReplacements(teamId, employeeId, date);
   if (suggestions.length > 0) {
     await prisma.absence.update({
       where: { id: absence.id },
@@ -50,12 +50,12 @@ absencesRouter.post("/", requireAuth, async (req, res) => {
 });
 
 absencesRouter.get("/", requireAdmin, async (req, res) => {
-  const organizationId = req.session.organizationId!;
+  const teamId = req.session.teamId;
   const date = typeof req.query.date === "string" ? req.query.date : undefined;
 
   const absences = await prisma.absence.findMany({
     where: {
-      employee: { organizationId },
+      teamId,
       ...(date ? { date: parseDateOnly(date) } : {}),
     },
     include: { employee: { select: { name: true } }, suggestedReplacement: { select: { name: true } } },
@@ -77,9 +77,9 @@ absencesRouter.get("/", requireAdmin, async (req, res) => {
 });
 
 absencesRouter.get("/:id/suggestions", requireAdmin, async (req, res) => {
-  const organizationId = req.session.organizationId!;
+  const teamId = req.session.teamId!;
   const absence = await prisma.absence.findFirst({
-    where: { id: req.params.id, employee: { organizationId } },
+    where: { id: req.params.id, teamId },
   });
   if (!absence) {
     res.status(404).json({ error: "Absence introuvable" });
@@ -87,7 +87,7 @@ absencesRouter.get("/:id/suggestions", requireAdmin, async (req, res) => {
   }
 
   const date = absence.date.toISOString().slice(0, 10);
-  const suggestions = await suggestReplacements(organizationId, absence.employeeId, date);
+  const suggestions = await suggestReplacements(teamId, absence.employeeId, date);
   res.json(suggestions);
 });
 
@@ -97,9 +97,9 @@ absencesRouter.post("/:id/resolve", requireAdmin, async (req, res) => {
     res.status(400).json({ error: parsed.error.flatten() });
     return;
   }
-  const organizationId = req.session.organizationId!;
+  const teamId = req.session.teamId!;
   const absence = await prisma.absence.findFirst({
-    where: { id: req.params.id, employee: { organizationId } },
+    where: { id: req.params.id, teamId },
     include: { employee: { select: { name: true } } },
   });
   if (!absence) {
@@ -109,15 +109,15 @@ absencesRouter.post("/:id/resolve", requireAdmin, async (req, res) => {
 
   const replacementIds = parsed.data.decisions.map((d) => d.replacementUserId).filter((id): id is string => id !== null);
   if (replacementIds.length > 0) {
-    const validReplacements = await prisma.user.findMany({
-      where: { id: { in: replacementIds }, organizationId },
-      select: { id: true, name: true },
+    const validReplacements = await prisma.teamMembership.findMany({
+      where: { userId: { in: replacementIds }, teamId },
+      include: { user: { select: { id: true, name: true } } },
     });
     if (validReplacements.length !== new Set(replacementIds).size) {
-      res.status(400).json({ error: "Remplaçant invalide pour cette organisation" });
+      res.status(400).json({ error: "Remplaçant invalide pour cette équipe" });
       return;
     }
-    const namesById = new Map(validReplacements.map((u) => [u.id, u.name]));
+    const namesById = new Map(validReplacements.map((m) => [m.user.id, m.user.name]));
 
     await prisma.$transaction(
       parsed.data.decisions
@@ -151,8 +151,8 @@ absencesRouter.post("/:id/resolve", requireAdmin, async (req, res) => {
 });
 
 absencesRouter.post("/:id/reject", requireAdmin, async (req, res) => {
-  const organizationId = req.session.organizationId!;
-  const absence = await prisma.absence.findFirst({ where: { id: req.params.id, employee: { organizationId } } });
+  const teamId = req.session.teamId;
+  const absence = await prisma.absence.findFirst({ where: { id: req.params.id, teamId } });
   if (!absence) {
     res.status(404).json({ error: "Absence introuvable" });
     return;

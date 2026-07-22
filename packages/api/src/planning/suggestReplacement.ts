@@ -14,22 +14,22 @@ export interface ReplacementSuggestion {
 }
 
 export async function suggestReplacements(
-  organizationId: string,
+  teamId: string,
   absentEmployeeId: string,
   date: string
 ): Promise<ReplacementSuggestion[]> {
   const day = parseDateOnly(date);
 
   const vacantBlocks = await prisma.planningBlock.findMany({
-    where: { employeeId: absentEmployeeId, date: day, task: { organizationId } },
+    where: { employeeId: absentEmployeeId, date: day, teamId },
     include: { task: true },
     orderBy: { startTime: "asc" },
   });
   if (vacantBlocks.length === 0) return [];
 
   const [context, todayBlocks] = await Promise.all([
-    loadDayContext(organizationId, date),
-    prisma.planningBlock.findMany({ where: { date: day, task: { organizationId } } }),
+    loadDayContext(teamId, date),
+    prisma.planningBlock.findMany({ where: { date: day, teamId } }),
   ]);
 
   const busyRangesByEmployee = new Map<string, { start: number; end: number }[]>();

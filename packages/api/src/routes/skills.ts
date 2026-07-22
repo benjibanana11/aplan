@@ -6,9 +6,9 @@ import { requireAdmin } from "../middleware/requireAuth.js";
 export const skillsRouter = Router();
 
 skillsRouter.get("/", requireAdmin, async (req, res) => {
-  const organizationId = req.session.organizationId!;
+  const teamId = req.session.teamId;
   const skills = await prisma.employeeTaskSkill.findMany({
-    where: { task: { organizationId } },
+    where: { teamId },
     include: { employee: { select: { name: true } }, task: { select: { name: true } } },
   });
   res.json(
@@ -32,14 +32,14 @@ skillsRouter.post("/", requireAdmin, async (req, res) => {
     res.status(400).json({ error: parsed.error.flatten() });
     return;
   }
-  const organizationId = req.session.organizationId!;
+  const teamId = req.session.teamId!;
   const { employeeId, taskId, hoursRequired } = parsed.data;
 
-  const [employee, task] = await Promise.all([
-    prisma.user.findFirst({ where: { id: employeeId, organizationId } }),
-    prisma.task.findFirst({ where: { id: taskId, organizationId } }),
+  const [membership, task] = await Promise.all([
+    prisma.teamMembership.findFirst({ where: { userId: employeeId, teamId } }),
+    prisma.task.findFirst({ where: { id: taskId, teamId } }),
   ]);
-  if (!employee || !task) {
+  if (!membership || !task) {
     res.status(404).json({ error: "Employé ou tâche introuvable" });
     return;
   }
@@ -51,7 +51,7 @@ skillsRouter.post("/", requireAdmin, async (req, res) => {
   }
 
   const skill = await prisma.employeeTaskSkill.create({
-    data: { employeeId, taskId, hoursRequired, status: "EN_FORMATION", hoursCompleted: 0 },
+    data: { employeeId, taskId, teamId, hoursRequired, status: "EN_FORMATION", hoursCompleted: 0 },
   });
   res.status(201).json(skill);
 });
@@ -62,11 +62,11 @@ skillsRouter.patch("/:employeeId/:taskId", requireAdmin, async (req, res) => {
     res.status(400).json({ error: parsed.error.flatten() });
     return;
   }
-  const organizationId = req.session.organizationId!;
+  const teamId = req.session.teamId;
   const { employeeId, taskId } = req.params;
 
   const existing = await prisma.employeeTaskSkill.findFirst({
-    where: { employeeId, taskId, task: { organizationId } },
+    where: { employeeId, taskId, teamId },
   });
   if (!existing) {
     res.status(404).json({ error: "Compétence introuvable" });
@@ -89,11 +89,11 @@ skillsRouter.patch("/:employeeId/:taskId", requireAdmin, async (req, res) => {
 });
 
 skillsRouter.delete("/:employeeId/:taskId", requireAdmin, async (req, res) => {
-  const organizationId = req.session.organizationId!;
+  const teamId = req.session.teamId;
   const { employeeId, taskId } = req.params;
 
   const existing = await prisma.employeeTaskSkill.findFirst({
-    where: { employeeId, taskId, task: { organizationId } },
+    where: { employeeId, taskId, teamId },
   });
   if (!existing) {
     res.status(404).json({ error: "Compétence introuvable" });

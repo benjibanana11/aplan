@@ -19,9 +19,9 @@ function addDays(date: string, days: number): string {
   return d.toISOString().slice(0, 10);
 }
 
-async function fetchPersistedBlocks(organizationId: string, day: Date) {
+async function fetchPersistedBlocks(teamId: string, day: Date) {
   const saved = await prisma.planningBlock.findMany({
-    where: { date: day, task: { organizationId } },
+    where: { date: day, teamId },
     include: { employee: { select: { name: true } }, task: { select: { name: true } } },
     orderBy: [{ startTime: "asc" }],
   });
@@ -48,8 +48,8 @@ planningRouter.post("/generate", requireAdmin, async (req, res) => {
     return;
   }
 
-  const organizationId = req.session.organizationId!;
-  const context = await loadDayContext(organizationId, parsed.data.date);
+  const teamId = req.session.teamId!;
+  const context = await loadDayContext(teamId, parsed.data.date);
   const result = generatePlanning(context);
 
   const employeeNames = new Map(context.employees.map((e) => [e.id, e.name]));
@@ -73,28 +73,29 @@ planningRouter.post("/validate", requireAdmin, async (req, res) => {
     return;
   }
 
-  const organizationId = req.session.organizationId!;
+  const teamId = req.session.teamId!;
   const { date, blocks } = parsed.data;
   const day = parseDateOnly(date);
 
-  const [employees, tasks] = await Promise.all([
-    prisma.user.findMany({ where: { organizationId }, select: { id: true } }),
-    prisma.task.findMany({ where: { organizationId }, select: { id: true } }),
+  const [memberships, tasks] = await Promise.all([
+    prisma.teamMembership.findMany({ where: { teamId }, select: { userId: true } }),
+    prisma.task.findMany({ where: { teamId }, select: { id: true } }),
   ]);
-  const employeeIds = new Set(employees.map((e) => e.id));
+  const employeeIds = new Set(memberships.map((m) => m.userId));
   const taskIds = new Set(tasks.map((t) => t.id));
   const invalid = blocks.some((b) => !employeeIds.has(b.employeeId) || !taskIds.has(b.taskId));
   if (invalid) {
-    res.status(400).json({ error: "Employé ou tâche invalide pour cette organisation" });
+    res.status(400).json({ error: "Employé ou tâche invalide pour cette équipe" });
     return;
   }
 
   await prisma.$transaction([
-    prisma.planningBlock.deleteMany({ where: { date: day, task: { organizationId } } }),
+    prisma.planningBlock.deleteMany({ where: { date: day, teamId } }),
     prisma.planningBlock.createMany({
       data: blocks.map((b) => ({
         employeeId: b.employeeId,
         taskId: b.taskId,
+        teamId,
         date: day,
         startTime: b.startTime,
         endTime: b.endTime,
@@ -106,7 +107,7 @@ planningRouter.post("/validate", requireAdmin, async (req, res) => {
     }),
   ]);
 
-  res.json(await fetchPersistedBlocks(organizationId, day));
+  res.json(await fetchPersistedBlocks(teamId, day));
 });
 
 planningRouter.get("/export", requireAdmin, async (req, res) => {
@@ -115,13 +116,13 @@ planningRouter.get("/export", requireAdmin, async (req, res) => {
     res.status(400).json({ error: "Paramètre month requis (AAAA-MM)" });
     return;
   }
-  const organizationId = req.session.organizationId!;
+  const teamId = req.session.teamId!;
   const [year, monthIndex] = month.split("-").map(Number);
   const start = new Date(Date.UTC(year, monthIndex - 1, 1));
   const end = new Date(Date.UTC(year, monthIndex, 1));
 
   const blocks = await prisma.planningBlock.findMany({
-    where: { date: { gte: start, lt: end }, task: { organizationId } },
+    where: { date: { gte: start, lt: end }, teamId },
     include: { employee: { select: { name: true } }, task: { select: { name: true } } },
     orderBy: [{ date: "asc" }, { startTime: "asc" }],
   });
@@ -147,13 +148,13 @@ planningRouter.get("/history", requireAdmin, async (req, res) => {
     res.status(400).json({ error: "Paramètre month requis (AAAA-MM)" });
     return;
   }
-  const organizationId = req.session.organizationId!;
+  const teamId = req.session.teamId;
   const [year, monthIndex] = month.split("-").map(Number);
   const start = new Date(Date.UTC(year, monthIndex - 1, 1));
   const end = new Date(Date.UTC(year, monthIndex, 1));
 
   const blocks = await prisma.planningBlock.findMany({
-    where: { date: { gte: start, lt: end }, task: { organizationId } },
+    where: { date: { gte: start, lt: end }, teamId },
     select: { date: true, employeeId: true },
   });
 
@@ -174,7 +175,7 @@ planningRouter.get("/history", requireAdmin, async (req, res) => {
 });
 
 planningRouter.get("/stats", requireAdmin, async (req, res) => {
-  const organizationId = req.session.organizationId!;
+  const teamId = req.session.teamId;
   const to = typeof req.query.to === "string" ? req.query.to : today();
   const from = typeof req.query.from === "string" ? req.query.from : addDays(to, -90);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) {
@@ -185,14 +186,18 @@ planningRouter.get("/stats", requireAdmin, async (req, res) => {
   const end = parseDateOnly(to);
   end.setUTCDate(end.getUTCDate() + 1);
 
-  const [employees, tasks, blocks] = await Promise.all([
-    prisma.user.findMany({ where: { organizationId, active: true }, select: { id: true, name: true } }),
-    prisma.task.findMany({ where: { organizationId }, select: { id: true, name: true } }),
+  const [memberships, tasks, blocks] = await Promise.all([
+    prisma.teamMembership.findMany({
+      where: { teamId, active: true },
+      include: { user: { select: { id: true, name: true } } },
+    }),
+    prisma.task.findMany({ where: { teamId }, select: { id: true, name: true } }),
     prisma.planningBlock.findMany({
-      where: { date: { gte: start, lt: end }, task: { organizationId } },
+      where: { date: { gte: start, lt: end }, teamId },
       select: { employeeId: true, taskId: true, date: true },
     }),
   ]);
+  const employees = memberships.map((m) => ({ id: m.user.id, name: m.user.name }));
 
   // Une occurrence par jour civil, même si une tâche a été découpée en plusieurs blocs ce jour-là
   // (cohérent avec le calcul d'équité du moteur de génération, voir loadDayContext.ts).
@@ -223,6 +228,6 @@ planningRouter.get("/:date", requireAuth, async (req, res) => {
     res.status(400).json({ error: "Date invalide (AAAA-MM-JJ)" });
     return;
   }
-  const organizationId = req.session.organizationId!;
-  res.json(await fetchPersistedBlocks(organizationId, parseDateOnly(date)));
+  const teamId = req.session.teamId!;
+  res.json(await fetchPersistedBlocks(teamId, parseDateOnly(date)));
 });

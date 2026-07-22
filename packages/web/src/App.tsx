@@ -4,6 +4,7 @@ import { RequireAuth, RequireRole } from "./auth/RequireRole";
 import { AppLayout } from "./layout/AppLayout";
 import { Login } from "./pages/Login";
 import { Register } from "./pages/Register";
+import { TeamSelect } from "./pages/TeamSelect";
 import { DashboardPage } from "./pages/admin/DashboardPage";
 import { EmployeesPage } from "./pages/admin/EmployeesPage";
 import { MonthlyScheduleGrid } from "./pages/admin/MonthlyScheduleGrid";
@@ -28,6 +29,7 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
+      <Route path="/select-team" element={<TeamSelect />} />
       <Route element={<AppLayout />}>
         <Route path="/" element={<Home />} />
         <Route

@@ -16,8 +16,8 @@ export function Login() {
     e.preventDefault();
     setError(null);
     try {
-      await login(email, password);
-      navigate("/");
+      const needsTeamSelection = await login(email, password);
+      navigate(needsTeamSelection ? "/select-team" : "/");
     } catch {
       setError("Identifiants invalides");
     }

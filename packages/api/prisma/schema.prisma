@@ -67,8 +67,11 @@ model TeamMembership {
 
 model User {
   id             String   @id @default(cuid())
-  organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id])
+  // Nullable : les nouveaux comptes créés après la bascule vers Company/Team (voir TeamMembership
+  // ci-dessus) n'ont plus d'Organization directe. Champ conservé jusqu'au nettoyage différé du
+  // schéma (Étape D du plan) pour ne pas perdre l'historique des comptes créés avant la bascule.
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
   name           String
   email          String   @unique
   passwordHash   String
@@ -91,8 +94,8 @@ model User {
 
 model Task {
   id                  String      @id @default(cuid())
-  organizationId      String
-  organization        Organization @relation(fields: [organizationId], references: [id])
+  organizationId      String?
+  organization        Organization? @relation(fields: [organizationId], references: [id])
   teamId              String?
   team                Team?       @relation(fields: [teamId], references: [id])
   name                String
@@ -114,6 +117,7 @@ model Task {
   planningBlocks  PlanningBlock[]
 
   @@unique([organizationId, priorityRank])
+  @@unique([teamId, priorityRank])
   @@index([organizationId])
   @@index([teamId])
 }
@@ -190,8 +194,8 @@ model Session {
 // en un clic sur la page Horaire, pour accélérer la saisie répétitive des horaires mensuels.
 model SchedulePreset {
   id             String       @id @default(cuid())
-  organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id])
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id])
   teamId         String?
   team           Team?        @relation(fields: [teamId], references: [id])
   startTime      String
@@ -199,6 +203,7 @@ model SchedulePreset {
   createdAt      DateTime     @default(now())
 
   @@unique([organizationId, startTime, endTime])
+  @@unique([teamId, startTime, endTime])
   @@index([organizationId])
   @@index([teamId])
 }

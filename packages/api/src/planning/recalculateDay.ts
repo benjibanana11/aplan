@@ -10,20 +10,21 @@ import { parseDateOnly } from "./time.js";
  * New blocks are flagged `needsRevalidation` so the admin sees the plan as "à valider" again,
  * even though it was persisted automatically.
  */
-export async function recalculateDayIfPlanned(organizationId: string, date: string): Promise<boolean> {
+export async function recalculateDayIfPlanned(teamId: string, date: string): Promise<boolean> {
   const day = parseDateOnly(date);
-  const existingCount = await prisma.planningBlock.count({ where: { date: day, task: { organizationId } } });
+  const existingCount = await prisma.planningBlock.count({ where: { date: day, teamId } });
   if (existingCount === 0) return false;
 
-  const context = await loadDayContext(organizationId, date);
+  const context = await loadDayContext(teamId, date);
   const result = generatePlanning(context);
 
   await prisma.$transaction([
-    prisma.planningBlock.deleteMany({ where: { date: day, task: { organizationId } } }),
+    prisma.planningBlock.deleteMany({ where: { date: day, teamId } }),
     prisma.planningBlock.createMany({
       data: result.blocks.map((b) => ({
         employeeId: b.employeeId,
         taskId: b.taskId,
+        teamId,
         date: day,
         startTime: b.startTime,
         endTime: b.endTime,

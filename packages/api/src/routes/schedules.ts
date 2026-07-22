@@ -20,10 +20,7 @@ schedulesRouter.get("/today", requireAuth, async (req, res) => {
   end.setUTCDate(end.getUTCDate() + 1);
 
   const entries = await prisma.workSchedule.findMany({
-    where: {
-      date: { gte: start, lt: end },
-      employee: { organizationId: req.session.organizationId },
-    },
+    where: { date: { gte: start, lt: end }, teamId: req.session.teamId },
     include: { employee: { select: { id: true, name: true } } },
     orderBy: { startTime: "asc" },
   });
@@ -37,10 +34,11 @@ schedulesRouter.get("/", requireAdmin, async (req, res) => {
     return;
   }
   const { start, end } = monthRange(month);
+  const teamId = req.session.teamId;
 
   const [entries, absences] = await Promise.all([
     prisma.workSchedule.findMany({
-      where: { date: { gte: start, lt: end }, employee: { organizationId: req.session.organizationId } },
+      where: { date: { gte: start, lt: end }, teamId },
       include: { employee: { select: { id: true, name: true } } },
       orderBy: [{ employee: { name: "asc" } }, { date: "asc" }],
     }),
@@ -48,7 +46,7 @@ schedulesRouter.get("/", requireAdmin, async (req, res) => {
     prisma.absence.findMany({
       where: {
         date: { gte: start, lt: end },
-        employee: { organizationId: req.session.organizationId },
+        teamId,
         status: { not: "REJECTED" },
       },
       select: { employeeId: true, date: true, reason: true },
@@ -84,7 +82,7 @@ schedulesRouter.get("/:employeeId", requireAuth, async (req, res) => {
   const { start, end } = monthRange(month);
 
   const entries = await prisma.workSchedule.findMany({
-    where: { employeeId, date: { gte: start, lt: end } },
+    where: { employeeId, teamId: req.session.teamId, date: { gte: start, lt: end } },
     orderBy: { date: "asc" },
   });
   res.json(entries);
@@ -103,10 +101,9 @@ schedulesRouter.put("/:employeeId", requireAdmin, async (req, res) => {
     return;
   }
 
-  const employee = await prisma.user.findFirst({
-    where: { id: employeeId, organizationId: req.session.organizationId },
-  });
-  if (!employee) {
+  const teamId = req.session.teamId!;
+  const membership = await prisma.teamMembership.findFirst({ where: { userId: employeeId, teamId } });
+  if (!membership) {
     res.status(404).json({ error: "Employé introuvable" });
     return;
   }
@@ -121,10 +118,11 @@ schedulesRouter.put("/:employeeId", requireAdmin, async (req, res) => {
   }
 
   await prisma.$transaction([
-    prisma.workSchedule.deleteMany({ where: { employeeId, date: { gte: start, lt: end } } }),
+    prisma.workSchedule.deleteMany({ where: { employeeId, teamId, date: { gte: start, lt: end } } }),
     prisma.workSchedule.createMany({
       data: parsed.data.entries.map((entry) => ({
         employeeId,
+        teamId,
         date: new Date(`${entry.date}T00:00:00.000Z`),
         startTime: entry.startTime,
         endTime: entry.endTime,
@@ -133,7 +131,7 @@ schedulesRouter.put("/:employeeId", requireAdmin, async (req, res) => {
   ]);
 
   const entries = await prisma.workSchedule.findMany({
-    where: { employeeId, date: { gte: start, lt: end } },
+    where: { employeeId, teamId, date: { gte: start, lt: end } },
     orderBy: { date: "asc" },
   });
   res.json(entries);
@@ -151,10 +149,9 @@ schedulesRouter.put("/:employeeId/:date", requireAdmin, async (req, res) => {
     return;
   }
 
-  const employee = await prisma.user.findFirst({
-    where: { id: employeeId, organizationId: req.session.organizationId },
-  });
-  if (!employee) {
+  const teamId = req.session.teamId!;
+  const membership = await prisma.teamMembership.findFirst({ where: { userId: employeeId, teamId } });
+  if (!membership) {
     res.status(404).json({ error: "Employé introuvable" });
     return;
   }
@@ -164,6 +161,7 @@ schedulesRouter.put("/:employeeId/:date", requireAdmin, async (req, res) => {
     update: { startTime: parsed.data.startTime, endTime: parsed.data.endTime },
     create: {
       employeeId,
+      teamId,
       date: parseDateOnly(date),
       startTime: parsed.data.startTime,
       endTime: parsed.data.endTime,
@@ -179,14 +177,13 @@ schedulesRouter.delete("/:employeeId/:date", requireAdmin, async (req, res) => {
     return;
   }
 
-  const employee = await prisma.user.findFirst({
-    where: { id: employeeId, organizationId: req.session.organizationId },
-  });
-  if (!employee) {
+  const teamId = req.session.teamId!;
+  const membership = await prisma.teamMembership.findFirst({ where: { userId: employeeId, teamId } });
+  if (!membership) {
     res.status(404).json({ error: "Employé introuvable" });
     return;
   }
 
-  await prisma.workSchedule.deleteMany({ where: { employeeId, date: parseDateOnly(date) } });
+  await prisma.workSchedule.deleteMany({ where: { employeeId, teamId, date: parseDateOnly(date) } });
   res.status(204).send();
 });

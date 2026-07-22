@@ -7,7 +7,7 @@ export const schedulePresetsRouter = Router();
 
 schedulePresetsRouter.get("/", requireAdmin, async (req, res) => {
   const presets = await prisma.schedulePreset.findMany({
-    where: { organizationId: req.session.organizationId },
+    where: { teamId: req.session.teamId },
     orderBy: { startTime: "asc" },
   });
   res.json(presets);
@@ -19,18 +19,18 @@ schedulePresetsRouter.post("/", requireAdmin, async (req, res) => {
     res.status(400).json({ error: parsed.error.flatten() });
     return;
   }
-  const organizationId = req.session.organizationId!;
+  const teamId = req.session.teamId!;
   const { startTime, endTime } = parsed.data;
 
   const existing = await prisma.schedulePreset.findUnique({
-    where: { organizationId_startTime_endTime: { organizationId, startTime, endTime } },
+    where: { teamId_startTime_endTime: { teamId, startTime, endTime } },
   });
   if (existing) {
     res.status(409).json({ error: "Cette heure de base existe déjà" });
     return;
   }
 
-  const preset = await prisma.schedulePreset.create({ data: { organizationId, startTime, endTime } });
+  const preset = await prisma.schedulePreset.create({ data: { teamId, startTime, endTime } });
   res.status(201).json(preset);
 });
 
@@ -40,9 +40,9 @@ schedulePresetsRouter.patch("/:id", requireAdmin, async (req, res) => {
     res.status(400).json({ error: parsed.error.flatten() });
     return;
   }
-  const organizationId = req.session.organizationId!;
+  const teamId = req.session.teamId!;
 
-  const preset = await prisma.schedulePreset.findFirst({ where: { id: req.params.id, organizationId } });
+  const preset = await prisma.schedulePreset.findFirst({ where: { id: req.params.id, teamId } });
   if (!preset) {
     res.status(404).json({ error: "Heure de base introuvable" });
     return;
@@ -50,7 +50,7 @@ schedulePresetsRouter.patch("/:id", requireAdmin, async (req, res) => {
 
   const { startTime, endTime } = parsed.data;
   const duplicate = await prisma.schedulePreset.findUnique({
-    where: { organizationId_startTime_endTime: { organizationId, startTime, endTime } },
+    where: { teamId_startTime_endTime: { teamId, startTime, endTime } },
   });
   if (duplicate && duplicate.id !== preset.id) {
     res.status(409).json({ error: "Cette heure de base existe déjà" });
@@ -65,8 +65,8 @@ schedulePresetsRouter.patch("/:id", requireAdmin, async (req, res) => {
 });
 
 schedulePresetsRouter.delete("/:id", requireAdmin, async (req, res) => {
-  const organizationId = req.session.organizationId!;
-  const preset = await prisma.schedulePreset.findFirst({ where: { id: req.params.id, organizationId } });
+  const teamId = req.session.teamId!;
+  const preset = await prisma.schedulePreset.findFirst({ where: { id: req.params.id, teamId } });
   if (!preset) {
     res.status(404).json({ error: "Heure de base introuvable" });
     return;
