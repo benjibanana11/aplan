@@ -135,6 +135,8 @@ function Sidebar() {
           </div>
         )}
       </div>
+
+      <p className="px-5 py-2 text-center text-[11px] text-slate-600">Créé par Benjamin Englebert, avec Claude</p>
     </aside>
   );
 }

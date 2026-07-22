@@ -14,6 +14,7 @@ export function AuthCard({ title, children }: { title: string; children: ReactNo
           <h1 className="mb-6 text-center text-lg font-semibold text-slate-900">{title}</h1>
           {children}
         </div>
+        <p className="mt-4 text-center text-xs text-slate-400">Créé par Benjamin Englebert, avec Claude</p>
       </div>
     </div>
   );
