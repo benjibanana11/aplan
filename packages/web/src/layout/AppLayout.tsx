@@ -36,7 +36,10 @@ const adminNavItems: NavItem[] = [
   { to: "/admin/stats", label: "Statistiques", icon: BarChart3 },
 ];
 
-const employeeNavItems: NavItem[] = [{ to: "/my-schedule", label: "Mon horaire", icon: CalendarClock }];
+const employeeNavItems: NavItem[] = [
+  { to: "/my-schedule", label: "Horaire", icon: CalendarClock },
+  { to: "/my-planning", label: "Planning", icon: CalendarDays },
+];
 
 const settingsNavItem: NavItem = { to: "/settings", label: "Réglages", icon: Settings };
 const companiesNavItem: NavItem = { to: "/admin/companies", label: "Entreprises", icon: Building2 };

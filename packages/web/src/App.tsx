@@ -15,7 +15,8 @@ import { SkillsMatrixPage } from "./pages/admin/SkillsMatrixPage";
 import { AbsencesPage } from "./pages/admin/AbsencesPage";
 import { StatsPage } from "./pages/admin/StatsPage";
 import { CompaniesPage } from "./pages/admin/CompaniesPage";
-import { MyScheduleView } from "./pages/employee/MyScheduleView";
+import { MyHoraireView } from "./pages/employee/MyHoraireView";
+import { MyPlanningView } from "./pages/employee/MyPlanningView";
 import { SettingsPage } from "./pages/SettingsPage";
 
 function Home() {
@@ -117,7 +118,15 @@ export default function App() {
           path="/my-schedule"
           element={
             <RequireAuth>
-              <MyScheduleView />
+              <MyHoraireView />
+            </RequireAuth>
+          }
+        />
+        <Route
+          path="/my-planning"
+          element={
+            <RequireAuth>
+              <MyPlanningView />
             </RequireAuth>
           }
         />
