@@ -7,6 +7,8 @@ import { Card } from "../../components/Card";
 import { Button } from "../../components/Button";
 import { Table, Thead, Tbody, Tr, Th, Td } from "../../components/Table";
 import { inputClass } from "../../components/formStyles";
+import { formatTimeCompact } from "../../lib/time";
+import { presetColorFor, useSchedulePresets } from "./SchedulePresetsPanel";
 
 interface WorkScheduleEntry {
   date: string;
@@ -36,6 +38,7 @@ export function MonthlyScheduleGrid() {
     queryFn: () => api.get<WorkScheduleEntry[]>(`/schedules/${employeeId}?month=${month}`),
     enabled: Boolean(employeeId),
   });
+  const { data: presets } = useSchedulePresets();
 
   useEffect(() => {
     const next: Record<string, { startTime: string; endTime: string }> = {};
@@ -61,6 +64,10 @@ export function MonthlyScheduleGrid() {
     setRows((prev) => ({ ...prev, [date]: { ...prev[date], [field]: value } as { startTime: string; endTime: string } }));
   }
 
+  function applyPreset(date: string, startTime: string, endTime: string) {
+    setRows((prev) => ({ ...prev, [date]: { startTime, endTime } }));
+  }
+
   return (
     <div>
       <PageHeader
@@ -82,6 +89,7 @@ export function MonthlyScheduleGrid() {
                 <Th>Date</Th>
                 <Th>Début</Th>
                 <Th>Fin</Th>
+                {presets && presets.length > 0 && <Th>Heures de base</Th>}
               </Tr>
             </Thead>
             <Tbody>
@@ -104,6 +112,25 @@ export function MonthlyScheduleGrid() {
                       className={inputClass}
                     />
                   </Td>
+                  {presets && presets.length > 0 && (
+                    <Td>
+                      <div className="flex flex-wrap gap-1.5">
+                        {presets.map((preset) => {
+                          const color = presetColorFor(presets, preset.startTime, preset.endTime)!;
+                          return (
+                            <button
+                              key={preset.id}
+                              type="button"
+                              onClick={() => applyPreset(date, preset.startTime, preset.endTime)}
+                              className={`rounded-lg border px-2 py-1 text-xs font-medium hover:opacity-80 ${color.bg} ${color.text} ${color.border}`}
+                            >
+                              {formatTimeCompact(preset.startTime)}-{formatTimeCompact(preset.endTime)}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </Td>
+                  )}
                 </Tr>
               ))}
             </Tbody>
