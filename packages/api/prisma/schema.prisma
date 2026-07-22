@@ -21,6 +21,50 @@ model Organization {
   schedulePresets SchedulePreset[]
 }
 
+// --- Multi-entreprises / multi-équipes (en cours de migration, voir le plan associé) ---
+// Company/Team/TeamMembership remplaceront Organization + User.organizationId/role/active à
+// terme. Pendant la migration, les deux modèles coexistent : Organization reste la source de
+// vérité tant que le backfill (script one-off) et la bascule du code applicatif n'ont pas eu lieu.
+model Company {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+
+  teams Team[]
+}
+
+model Team {
+  id        String   @id @default(cuid())
+  companyId String
+  company   Company  @relation(fields: [companyId], references: [id])
+  name      String
+  teamCode  String   @unique
+  createdAt DateTime @default(now())
+
+  memberships     TeamMembership[]
+  tasks           Task[]
+  schedulePresets SchedulePreset[]
+  workSchedules   WorkSchedule[]
+  planningBlocks  PlanningBlock[]
+  absences        Absence[]
+  employeeTaskSkills EmployeeTaskSkill[]
+
+  @@index([companyId])
+}
+
+model TeamMembership {
+  id     String  @id @default(cuid())
+  userId String
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  teamId String
+  team   Team    @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  role   String  @default("EMPLOYEE")
+  active Boolean @default(true)
+
+  @@unique([userId, teamId])
+  @@index([teamId])
+}
+
 model User {
   id             String   @id @default(cuid())
   organizationId String
@@ -33,6 +77,7 @@ model User {
   hireDate       DateTime
   createdAt      DateTime @default(now())
 
+  memberships       TeamMembership[]
   skills            EmployeeTaskSkill[] @relation("EmployeeSkills")
   validatedSkills   EmployeeTaskSkill[] @relation("SkillValidator")
   workSchedules     WorkSchedule[]
@@ -48,6 +93,8 @@ model Task {
   id                  String      @id @default(cuid())
   organizationId      String
   organization        Organization @relation(fields: [organizationId], references: [id])
+  teamId              String?
+  team                Team?       @relation(fields: [teamId], references: [id])
   name                String
   description         String
   category            String
@@ -68,6 +115,7 @@ model Task {
 
   @@unique([organizationId, priorityRank])
   @@index([organizationId])
+  @@index([teamId])
 }
 
 model EmployeeTaskSkill {
@@ -75,6 +123,8 @@ model EmployeeTaskSkill {
   employee        User        @relation("EmployeeSkills", fields: [employeeId], references: [id], onDelete: Cascade)
   taskId          String
   task            Task        @relation(fields: [taskId], references: [id])
+  teamId          String?
+  team            Team?       @relation(fields: [teamId], references: [id])
   status          String      @default("EN_FORMATION")
   hoursCompleted  Float       @default(0)
   hoursRequired   Float
@@ -83,18 +133,22 @@ model EmployeeTaskSkill {
   validatedBy     User?       @relation("SkillValidator", fields: [validatedByUserId], references: [id], onDelete: SetNull)
 
   @@id([employeeId, taskId])
+  @@index([teamId])
 }
 
 model WorkSchedule {
   id         String   @id @default(cuid())
   employeeId String
   employee   User     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  teamId     String?
+  team       Team?    @relation(fields: [teamId], references: [id])
   date       DateTime
   startTime  String
   endTime    String
 
   @@unique([employeeId, date])
   @@index([date])
+  @@index([teamId])
 }
 
 model PlanningBlock {
@@ -103,6 +157,8 @@ model PlanningBlock {
   employee      User     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
   taskId        String
   task          Task     @relation(fields: [taskId], references: [id])
+  teamId        String?
+  team          Team?    @relation(fields: [teamId], references: [id])
   date          DateTime
   startTime     String
   endTime       String
@@ -115,6 +171,7 @@ model PlanningBlock {
   @@index([date])
   @@index([employeeId, date])
   @@index([taskId, date])
+  @@index([teamId])
 }
 
 // Table de sessions gérée par connect-pg-simple (packages/api/src/index.ts), pas par l'app elle-même
@@ -135,18 +192,23 @@ model SchedulePreset {
   id             String       @id @default(cuid())
   organizationId String
   organization   Organization @relation(fields: [organizationId], references: [id])
+  teamId         String?
+  team           Team?        @relation(fields: [teamId], references: [id])
   startTime      String
   endTime        String
   createdAt      DateTime     @default(now())
 
   @@unique([organizationId, startTime, endTime])
   @@index([organizationId])
+  @@index([teamId])
 }
 
 model Absence {
   id                       String   @id @default(cuid())
   employeeId               String
   employee                 User     @relation("AbsentUser", fields: [employeeId], references: [id], onDelete: Cascade)
+  teamId                   String?
+  team                     Team?    @relation(fields: [teamId], references: [id])
   date                     DateTime
   reason                   String?
   status                   String   @default("PENDING")
@@ -157,4 +219,5 @@ model Absence {
   createdAt                DateTime @default(now())
 
   @@index([employeeId, date])
+  @@index([teamId])
 }
