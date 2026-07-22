@@ -121,43 +121,48 @@ export function PlanningTimeline({
                     ? ` — en formation${block.trainerName ? `, encadré(e) par ${block.trainerName}` : ""}`
                     : "";
 
-                  if (editable && editingIndex === blockIndex) {
-                    return (
-                      <select
-                        key={blockIndex}
-                        autoFocus
-                        value={block.taskId}
-                        onChange={(e) => {
-                          onChangeTask!(blockIndex, e.target.value);
-                          setEditingIndex(null);
-                        }}
-                        onBlur={() => setEditingIndex(null)}
-                        className="absolute top-0 h-8 rounded-md border border-blue-400 px-1 text-xs font-medium shadow-sm outline-none"
-                        style={{ left: `${left}%`, width: `${width}%` }}
-                      >
-                        {tasks!.map((task) => (
-                          <option key={task.id} value={task.id}>
-                            {task.name}
-                          </option>
-                        ))}
-                      </select>
-                    );
-                  }
+                  const isOpen = editable && editingIndex === blockIndex;
 
                   return (
-                    <div
-                      key={blockIndex}
-                      title={`${block.taskName} (${block.startTime}–${block.endTime})${trainingSuffix}${
-                        editable ? " — cliquer pour changer la tâche" : ""
-                      }`}
-                      onClick={editable ? () => setEditingIndex(blockIndex) : undefined}
-                      className={`absolute top-0 flex h-8 items-center gap-1 overflow-hidden rounded-md px-2 text-xs font-medium whitespace-nowrap ${color.bg} ${color.text} ${
-                        block.isTraining ? "ring-2 ring-inset ring-amber-400" : ""
-                      } ${editable ? "cursor-pointer hover:ring-2 hover:ring-inset hover:ring-blue-400" : ""}`}
-                      style={{ left: `${left}%`, width: `${width}%` }}
-                    >
-                      {block.isTraining && <GraduationCap className="h-3.5 w-3.5 shrink-0" />}
-                      <span className="truncate">{block.taskName}</span>
+                    <div key={blockIndex} className="absolute top-0" style={{ left: `${left}%`, width: `${width}%` }}>
+                      <div
+                        title={`${block.taskName} (${block.startTime}–${block.endTime})${trainingSuffix}${
+                          editable ? " — cliquer pour changer la tâche" : ""
+                        }`}
+                        onClick={editable ? () => setEditingIndex(isOpen ? null : blockIndex) : undefined}
+                        className={`flex h-8 items-center gap-1 overflow-hidden rounded-md px-2 text-xs font-medium whitespace-nowrap ${color.bg} ${color.text} ${
+                          block.isTraining ? "ring-2 ring-inset ring-amber-400" : ""
+                        } ${editable ? "cursor-pointer hover:ring-2 hover:ring-inset hover:ring-blue-400" : ""} ${
+                          isOpen ? "ring-2 ring-inset ring-blue-500" : ""
+                        }`}
+                      >
+                        {block.isTraining && <GraduationCap className="h-3.5 w-3.5 shrink-0" />}
+                        <span className="truncate">{block.taskName}</span>
+                      </div>
+
+                      {isOpen && (
+                        <>
+                          {/* Capte les clics en dehors du menu pour le refermer. */}
+                          <div className="fixed inset-0 z-40" onClick={() => setEditingIndex(null)} />
+                          <div className="absolute top-full left-0 z-50 mt-1 w-44 rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
+                            {tasks!.map((task) => (
+                              <button
+                                key={task.id}
+                                type="button"
+                                onClick={() => {
+                                  onChangeTask!(blockIndex, task.id);
+                                  setEditingIndex(null);
+                                }}
+                                className={`block w-full truncate px-3 py-1.5 text-left text-xs whitespace-normal hover:bg-slate-50 ${
+                                  task.id === block.taskId ? "bg-blue-50 font-medium text-blue-700" : "text-slate-700"
+                                }`}
+                              >
+                                {task.name}
+                              </button>
+                            ))}
+                          </div>
+                        </>
+                      )}
                     </div>
                   );
                 })}
