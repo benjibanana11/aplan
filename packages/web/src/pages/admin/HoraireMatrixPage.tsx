@@ -9,7 +9,7 @@ import { Table, Thead, Tbody, Tr, Th, Td } from "../../components/Table";
 import { inputClass, labelClass } from "../../components/formStyles";
 import { currentMonth, daysInMonth, isWeekend, weekdayLetter } from "../../lib/dates";
 import { formatTimeCompact } from "../../lib/time";
-import { SchedulePresetsPanel, useSchedulePresets } from "./SchedulePresetsPanel";
+import { SchedulePresetsPanel, presetColorFor, useSchedulePresets } from "./SchedulePresetsPanel";
 
 interface Employee {
   id: string;
@@ -143,6 +143,7 @@ export function HoraireMatrixPage() {
                         const entry = entryFor(employee.id, day);
                         const absence = absenceFor(employee.id, day);
                         const isSelected = selected?.employeeId === employee.id && selected?.date === day;
+                        const color = entry ? presetColorFor(presets, entry.startTime, entry.endTime) : undefined;
                         return (
                           <Td key={day} className={`p-1 text-center ${isWeekend(day) ? "bg-slate-50" : ""}`}>
                             <button
@@ -153,9 +154,11 @@ export function HoraireMatrixPage() {
                                   ? "bg-blue-100 text-blue-700"
                                   : absence
                                     ? "text-red-600 hover:bg-red-50"
-                                    : entry
-                                      ? "text-slate-700 hover:bg-slate-100"
-                                      : "text-slate-300 hover:bg-slate-100"
+                                    : color
+                                      ? `${color.bg} ${color.text} hover:opacity-80`
+                                      : entry
+                                        ? "text-slate-700 hover:bg-slate-100"
+                                        : "text-slate-300 hover:bg-slate-100"
                               }`}
                             >
                               {absence
@@ -205,17 +208,20 @@ export function HoraireMatrixPage() {
                   <div>
                     <span className="mb-1.5 block text-sm font-medium text-slate-700">Heures de base</span>
                     <div className="flex flex-wrap gap-1.5">
-                      {presets.map((preset) => (
-                        <button
-                          key={preset.id}
-                          type="button"
-                          onClick={() => applyPreset(preset.startTime, preset.endTime)}
-                          disabled={saveDay.isPending}
-                          className="rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-medium text-slate-700 hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
-                        >
-                          {formatTimeCompact(preset.startTime)}-{formatTimeCompact(preset.endTime)}
-                        </button>
-                      ))}
+                      {presets.map((preset) => {
+                        const color = presetColorFor(presets, preset.startTime, preset.endTime)!;
+                        return (
+                          <button
+                            key={preset.id}
+                            type="button"
+                            onClick={() => applyPreset(preset.startTime, preset.endTime)}
+                            disabled={saveDay.isPending}
+                            className={`rounded-lg border px-2.5 py-1 text-xs font-medium hover:opacity-80 ${color.bg} ${color.text} ${color.border}`}
+                          >
+                            {formatTimeCompact(preset.startTime)}-{formatTimeCompact(preset.endTime)}
+                          </button>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
