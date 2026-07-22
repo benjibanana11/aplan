@@ -10,6 +10,7 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
     "seed": "tsx src/seed.ts",
+    "backfill:company-team": "tsx src/scripts/backfillCompanyTeam.ts",
     "test": "vitest run"
   },
   "dependencies": {
