@@ -36,3 +36,23 @@ export async function requireAdmin(req: Request, res: Response, next: NextFuncti
     next();
   });
 }
+
+// Accès plateforme (créer/lister des entreprises et équipes), indépendant du rôle par équipe et
+// de l'équipe actuellement sélectionnée dans la session — un super-admin doit pouvoir y accéder
+// quelle que soit l'équipe sur laquelle il est connecté. Ne dépend donc que d'un userId valide,
+// pas de requireAuth/teamId.
+export async function requireSuperAdmin(req: Request, res: Response, next: NextFunction) {
+  if (!req.session.userId) {
+    res.status(401).json({ error: "Non authentifié" });
+    return;
+  }
+  const user = await prisma.user.findUnique({
+    where: { id: req.session.userId },
+    select: { isSuperAdmin: true },
+  });
+  if (!user || !user.isSuperAdmin) {
+    res.status(403).json({ error: "Réservé aux super-administrateurs" });
+    return;
+  }
+  next();
+}

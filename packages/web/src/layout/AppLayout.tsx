@@ -14,6 +14,7 @@ import {
   Settings,
   Check,
   LogOut,
+  Building2,
 } from "lucide-react";
 import { useAuth } from "../auth/AuthContext";
 import { initials } from "../lib/initials";
@@ -38,12 +39,17 @@ const adminNavItems: NavItem[] = [
 const employeeNavItems: NavItem[] = [{ to: "/my-schedule", label: "Mon horaire", icon: CalendarClock }];
 
 const settingsNavItem: NavItem = { to: "/settings", label: "Réglages", icon: Settings };
+const companiesNavItem: NavItem = { to: "/admin/companies", label: "Entreprises", icon: Building2 };
 
 function Sidebar() {
   const { user, logout, switchTeam } = useAuth();
   const [menuOpen, setMenuOpen] = useState(false);
   if (!user) return null;
-  const items = [...(user.role === "ADMIN" ? adminNavItems : employeeNavItems), settingsNavItem];
+  const items = [
+    ...(user.role === "ADMIN" ? adminNavItems : employeeNavItems),
+    ...(user.isSuperAdmin ? [companiesNavItem] : []),
+    settingsNavItem,
+  ];
   const hasMultipleTeams = user.teams.length > 1;
 
   async function handleSwitchTeam(teamId: string) {

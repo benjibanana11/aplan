@@ -5,6 +5,7 @@ import cors from "cors";
 import session from "express-session";
 import connectPgSimple from "connect-pg-simple";
 import { authRouter } from "./routes/auth.js";
+import { adminRouter } from "./routes/admin.js";
 import { employeesRouter } from "./routes/employees.js";
 import { schedulesRouter } from "./routes/schedules.js";
 import { schedulePresetsRouter } from "./routes/schedulePresets.js";
@@ -62,6 +63,7 @@ app.use(
 );
 
 app.use("/auth", authRouter);
+app.use("/admin", adminRouter);
 app.use("/employees", employeesRouter);
 app.use("/schedules", schedulesRouter);
 app.use("/schedule-presets", schedulePresetsRouter);

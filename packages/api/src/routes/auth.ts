@@ -36,7 +36,7 @@ async function activeTeamOptions(userId: string): Promise<TeamOption[]> {
 }
 
 function currentUserPayload(
-  user: { id: string; name: string; email: string },
+  user: { id: string; name: string; email: string; isSuperAdmin: boolean },
   team: TeamOption,
   teams: TeamOption[]
 ) {
@@ -44,6 +44,7 @@ function currentUserPayload(
     id: user.id,
     name: user.name,
     email: user.email,
+    isSuperAdmin: user.isSuperAdmin,
     role: team.role,
     companyId: team.companyId,
     companyName: team.companyName,

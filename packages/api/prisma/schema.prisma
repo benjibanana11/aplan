@@ -79,6 +79,10 @@ model User {
   active         Boolean  @default(true)
   hireDate       DateTime
   createdAt      DateTime @default(now())
+  // Accès plateforme, indépendant du rôle par équipe (TeamMembership.role) : peut créer/voir
+  // n'importe quelle Company/Team, tous comptes confondus. Distinct d'ADMIN car un admin d'équipe
+  // ne doit justement pas pouvoir accéder aux entreprises/équipes d'autrui.
+  isSuperAdmin   Boolean  @default(false)
 
   memberships       TeamMembership[]
   skills            EmployeeTaskSkill[] @relation("EmployeeSkills")

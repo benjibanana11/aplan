@@ -1,6 +1,6 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import { useAuth } from "./auth/AuthContext";
-import { RequireAuth, RequireRole } from "./auth/RequireRole";
+import { RequireAuth, RequireRole, RequireSuperAdmin } from "./auth/RequireRole";
 import { AppLayout } from "./layout/AppLayout";
 import { Login } from "./pages/Login";
 import { Register } from "./pages/Register";
@@ -14,6 +14,7 @@ import { PlanningGenerationPage } from "./pages/admin/PlanningGenerationPage";
 import { SkillsMatrixPage } from "./pages/admin/SkillsMatrixPage";
 import { AbsencesPage } from "./pages/admin/AbsencesPage";
 import { StatsPage } from "./pages/admin/StatsPage";
+import { CompaniesPage } from "./pages/admin/CompaniesPage";
 import { MyScheduleView } from "./pages/employee/MyScheduleView";
 import { SettingsPage } from "./pages/SettingsPage";
 
@@ -102,6 +103,14 @@ export default function App() {
             <RequireRole role="ADMIN">
               <StatsPage />
             </RequireRole>
+          }
+        />
+        <Route
+          path="/admin/companies"
+          element={
+            <RequireSuperAdmin>
+              <CompaniesPage />
+            </RequireSuperAdmin>
           }
         />
         <Route

@@ -14,6 +14,7 @@ export interface CurrentUser {
   id: string;
   name: string;
   email: string;
+  isSuperAdmin: boolean;
   role: Role;
   companyId: string;
   companyName: string;
