@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { GraduationCap } from "lucide-react";
 import { initials } from "../lib/initials";
 import { timeToMinutes } from "../lib/time";
@@ -14,6 +15,11 @@ interface PlanningBlock {
   trainerName?: string | null;
 }
 
+interface TaskOption {
+  id: string;
+  name: string;
+}
+
 const PALETTE = [
   { bg: "bg-blue-100", text: "text-blue-700", dot: "bg-blue-500" },
   { bg: "bg-purple-100", text: "text-purple-700", dot: "bg-purple-500" },
@@ -25,7 +31,22 @@ const PALETTE = [
   { bg: "bg-orange-100", text: "text-orange-700", dot: "bg-orange-500" },
 ];
 
-export function PlanningTimeline({ blocks, taskOrder }: { blocks: PlanningBlock[]; taskOrder: string[] }) {
+export function PlanningTimeline({
+  blocks,
+  taskOrder,
+  tasks,
+  onChangeTask,
+}: {
+  blocks: PlanningBlock[];
+  taskOrder: string[];
+  /** Fournis avec onChangeTask pour rendre les blocs cliquables (page admin uniquement — la vue
+   * employé en lecture seule ne les passe pas). */
+  tasks?: TaskOption[];
+  onChangeTask?: (blockIndex: number, taskId: string) => void;
+}) {
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const editable = Boolean(tasks && onChangeTask);
+
   if (blocks.length === 0) {
     return <p className="text-sm text-slate-500">Aucun bloc à afficher pour cette date.</p>;
   }
@@ -87,20 +108,52 @@ export function PlanningTimeline({ blocks, taskOrder }: { blocks: PlanningBlock[
                     style={{ left: `${pct(h * 60)}%` }}
                   />
                 ))}
-                {row.blocks.map((block, i) => {
+                {row.blocks.map((block) => {
+                  // Index global dans `blocks` (pas l'index local à la ligne de l'employé) : sert à la
+                  // fois de clé React unique et d'index à renvoyer via onChangeTask. Utiliser l'index
+                  // local ici causerait une collision entre le 1er bloc de chaque employé (tous à
+                  // l'index 0), et donc plusieurs <select> tentant de prendre le focus en même temps.
+                  const blockIndex = blocks.indexOf(block);
                   const color = colorForTask(block.taskId);
                   const left = pct(timeToMinutes(block.startTime));
                   const width = pct(timeToMinutes(block.endTime)) - left;
                   const trainingSuffix = block.isTraining
                     ? ` — en formation${block.trainerName ? `, encadré(e) par ${block.trainerName}` : ""}`
                     : "";
+
+                  if (editable && editingIndex === blockIndex) {
+                    return (
+                      <select
+                        key={blockIndex}
+                        autoFocus
+                        value={block.taskId}
+                        onChange={(e) => {
+                          onChangeTask!(blockIndex, e.target.value);
+                          setEditingIndex(null);
+                        }}
+                        onBlur={() => setEditingIndex(null)}
+                        className="absolute top-0 h-8 rounded-md border border-blue-400 px-1 text-xs font-medium shadow-sm outline-none"
+                        style={{ left: `${left}%`, width: `${width}%` }}
+                      >
+                        {tasks!.map((task) => (
+                          <option key={task.id} value={task.id}>
+                            {task.name}
+                          </option>
+                        ))}
+                      </select>
+                    );
+                  }
+
                   return (
                     <div
-                      key={block.id ?? i}
-                      title={`${block.taskName} (${block.startTime}–${block.endTime})${trainingSuffix}`}
+                      key={blockIndex}
+                      title={`${block.taskName} (${block.startTime}–${block.endTime})${trainingSuffix}${
+                        editable ? " — cliquer pour changer la tâche" : ""
+                      }`}
+                      onClick={editable ? () => setEditingIndex(blockIndex) : undefined}
                       className={`absolute top-0 flex h-8 items-center gap-1 overflow-hidden rounded-md px-2 text-xs font-medium whitespace-nowrap ${color.bg} ${color.text} ${
                         block.isTraining ? "ring-2 ring-inset ring-amber-400" : ""
-                      }`}
+                      } ${editable ? "cursor-pointer hover:ring-2 hover:ring-inset hover:ring-blue-400" : ""}`}
                       style={{ left: `${left}%`, width: `${width}%` }}
                     >
                       {block.isTraining && <GraduationCap className="h-3.5 w-3.5 shrink-0" />}

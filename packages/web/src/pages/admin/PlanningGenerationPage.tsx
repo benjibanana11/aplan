@@ -216,7 +216,12 @@ export function PlanningGenerationPage() {
 
           {view === "timeline" && (
             <Card>
-              <PlanningTimeline blocks={blocks} taskOrder={tasks?.map((t) => t.id) ?? []} />
+              <PlanningTimeline
+                blocks={blocks}
+                taskOrder={tasks?.map((t) => t.id) ?? []}
+                tasks={tasks}
+                onChangeTask={changeBlockTask}
+              />
             </Card>
           )}
 
