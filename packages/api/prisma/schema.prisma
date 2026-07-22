@@ -194,6 +194,11 @@ model Absence {
   validatedByUserId        String?
   validatedBy              User?    @relation("AbsenceValidator", fields: [validatedByUserId], references: [id], onDelete: SetNull)
   createdAt                DateTime @default(now())
+  // true si un planning était déjà validé pour ce jour au moment de la déclaration : il a alors été
+  // recalculé automatiquement (voir recalculateDay.ts), ce qui supprime les anciens PlanningBlock —
+  // previousAssignments est donc la seule trace de ce sur quoi la personne était affectée avant.
+  recalculated             Boolean  @default(false)
+  previousAssignments      Json?
 
   @@index([employeeId, date])
   @@index([teamId])

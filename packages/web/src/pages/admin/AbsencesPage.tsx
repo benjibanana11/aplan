@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { UserX } from "lucide-react";
+import { UserX, AlertTriangle } from "lucide-react";
 import { api } from "../../api/client";
 import { PageHeader } from "../../components/PageHeader";
 import { Card } from "../../components/Card";
@@ -15,6 +15,13 @@ interface Employee {
   name: string;
 }
 
+interface PreviousAssignment {
+  taskId: string;
+  taskName: string;
+  startTime: string;
+  endTime: string;
+}
+
 interface Absence {
   id: string;
   employeeId: string;
@@ -24,6 +31,10 @@ interface Absence {
   status: "PENDING" | "VALIDATED" | "REJECTED";
   suggestedReplacementUserId: string | null;
   suggestedReplacementName: string | null;
+  /** true si un planning était déjà validé pour ce jour : il a été recalculé automatiquement,
+   * donc previousAssignments est la seule trace de ce sur quoi la personne était affectée. */
+  recalculated: boolean;
+  previousAssignments: PreviousAssignment[] | null;
 }
 
 interface Suggestion {
@@ -63,19 +74,25 @@ export function AbsencesPage() {
 
   const { data: employees } = useQuery({ queryKey: ["employees"], queryFn: () => api.get<Employee[]>("/employees") });
   const { data: absences } = useQuery({ queryKey: ["absences"], queryFn: () => api.get<Absence[]>("/absences") });
+  const selectedAbsence = absences?.find((a) => a.id === selectedAbsenceId);
   const { data: suggestions } = useQuery({
     queryKey: ["absence-suggestions", selectedAbsenceId],
     queryFn: () => api.get<Suggestion[]>(`/absences/${selectedAbsenceId}/suggestions`),
-    enabled: Boolean(selectedAbsenceId),
+    // Un planning déjà validé est recalculé automatiquement à la déclaration (voir POST /absences) :
+    // il n'y a alors plus de poste vacant à suggérer, previousAssignments (ci-dessous) le remplace.
+    enabled: Boolean(selectedAbsenceId) && !selectedAbsence?.recalculated,
   });
 
   const invalidateAbsences = () => queryClient.invalidateQueries({ queryKey: ["absences"] });
 
   const declare = useMutation({
-    mutationFn: () => api.post("/absences", { employeeId, date, reason: reason || undefined }),
-    onSuccess: () => {
+    mutationFn: () =>
+      api.post<{ id: string }>("/absences", { employeeId, date, reason: reason || undefined }),
+    onSuccess: (created) => {
       invalidateAbsences();
       setReason("");
+      setSelectedAbsenceId(created.id);
+      setDecisions({});
     },
   });
 
@@ -112,7 +129,14 @@ export function AbsencesPage() {
   }
 
   function submitResolve() {
-    if (!selectedAbsenceId || !suggestions) return;
+    if (!selectedAbsenceId) return;
+    // Planning déjà recalculé automatiquement (voir POST /absences) : rien à décider par tâche,
+    // "Valider" ne fait alors qu'acter l'absence elle-même.
+    if (selectedAbsence?.recalculated) {
+      resolve.mutate({ id: selectedAbsenceId, decisions: [] });
+      return;
+    }
+    if (!suggestions) return;
     resolve.mutate({
       id: selectedAbsenceId,
       decisions: suggestions.map((s) => ({
@@ -124,7 +148,6 @@ export function AbsencesPage() {
     });
   }
 
-  const selectedAbsence = absences?.find((a) => a.id === selectedAbsenceId);
   const panelRef = useScrollIntoView<HTMLDivElement>(selectedAbsenceId);
 
   return (
@@ -197,14 +220,37 @@ export function AbsencesPage() {
         {selectedAbsence && (
           <div ref={panelRef} className="w-[28rem] shrink-0 scroll-mt-6">
             <Card title={`Absence de ${selectedAbsence.employeeName} — ${selectedAbsence.date}`}>
-              {suggestions && suggestions.length === 0 && (
+              {selectedAbsence.previousAssignments && selectedAbsence.previousAssignments.length > 0 && (
+                <div className="mb-4 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+                  <p className="mb-1 font-medium text-slate-700">
+                    {selectedAbsence.employeeName} était affecté(e) à :
+                  </p>
+                  <ul className="space-y-0.5 text-slate-600">
+                    {selectedAbsence.previousAssignments.map((a) => (
+                      <li key={`${a.taskId}:${a.startTime}`}>
+                        {a.startTime}–{a.endTime} · {a.taskName}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {selectedAbsence.recalculated && (
+                <p className="mb-4 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                  Le planning de ce jour était déjà validé — il a été recalculé automatiquement pour
+                  exclure {selectedAbsence.employeeName}. Vérifiez-le et revalidez-le sur la page Planning.
+                </p>
+              )}
+
+              {!selectedAbsence.recalculated && suggestions && suggestions.length === 0 && (
                 <p className="flex items-center gap-2 text-sm text-slate-500">
                   <UserX className="h-4 w-4" />
                   Aucun poste vacant : aucun planning validé n'existe pour ce jour.
                 </p>
               )}
 
-              {suggestions && suggestions.length > 0 && (
+              {!selectedAbsence.recalculated && suggestions && suggestions.length > 0 && (
                 <Table>
                   <Thead>
                     <Tr>

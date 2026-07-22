@@ -28,13 +28,37 @@ absencesRouter.post("/", requireAuth, async (req, res) => {
     return;
   }
 
+  // Capturé AVANT le recalcul ci-dessous, qui supprime et remplace les PlanningBlock du jour —
+  // sans ça, on perd toute trace de ce sur quoi la personne était affectée (voir recalculateDay.ts).
+  const day = parseDateOnly(date);
+  const previousBlocks = await prisma.planningBlock.findMany({
+    where: { employeeId, date: day, teamId },
+    include: { task: { select: { name: true } } },
+    orderBy: { startTime: "asc" },
+  });
+  const previousAssignments = previousBlocks.map((b) => ({
+    taskId: b.taskId,
+    taskName: b.task.name,
+    startTime: b.startTime,
+    endTime: b.endTime,
+  }));
+
   const absence = await prisma.absence.create({
-    data: { employeeId, teamId, date: parseDateOnly(date), reason },
+    data: {
+      employeeId,
+      teamId,
+      date: day,
+      reason,
+      previousAssignments: previousAssignments.length > 0 ? previousAssignments : undefined,
+    },
   });
 
   // Si un planning existait déjà pour ce jour (généré ou validé), le recalculer immédiatement en
   // excluant l'employé absent — le planning repasse alors "à valider" (voir needsRevalidation).
   const recalculated = await recalculateDayIfPlanned(teamId, date);
+  if (recalculated) {
+    await prisma.absence.update({ where: { id: absence.id }, data: { recalculated: true } });
+  }
 
   const suggestions = recalculated ? [] : await suggestReplacements(teamId, employeeId, date);
   if (suggestions.length > 0) {
@@ -44,9 +68,16 @@ absencesRouter.post("/", requireAuth, async (req, res) => {
     });
   }
 
-  res
-    .status(201)
-    .json({ id: absence.id, employeeId, date, reason: reason ?? null, status: "PENDING", suggestions, recalculated });
+  res.status(201).json({
+    id: absence.id,
+    employeeId,
+    date,
+    reason: reason ?? null,
+    status: "PENDING",
+    suggestions,
+    recalculated,
+    previousAssignments,
+  });
 });
 
 absencesRouter.get("/", requireAdmin, async (req, res) => {
@@ -72,6 +103,8 @@ absencesRouter.get("/", requireAdmin, async (req, res) => {
       status: a.status,
       suggestedReplacementUserId: a.suggestedReplacementUserId,
       suggestedReplacementName: a.suggestedReplacement?.name ?? null,
+      recalculated: a.recalculated,
+      previousAssignments: a.previousAssignments,
     }))
   );
 });
