@@ -8,6 +8,19 @@ export const registerSchema = z.object({
 });
 export type RegisterInput = z.infer<typeof registerSchema>;
 
+export const registerNewTeamSchema = z.object({
+  companyName: z.string().min(1, "Nom d'entreprise requis"),
+  teamName: z.string().min(1, "Nom d'équipe requis"),
+  teamCode: z
+    .string()
+    .min(3, "Code d'équipe : 3 caractères minimum")
+    .regex(/^[A-Za-z0-9-]+$/, "Lettres, chiffres et tirets uniquement"),
+  name: z.string().min(1, "Nom requis"),
+  email: z.string().email("Email invalide"),
+  password: z.string().min(8, "Mot de passe : 8 caractères minimum"),
+});
+export type RegisterNewTeamInput = z.infer<typeof registerNewTeamSchema>;
+
 export const loginSchema = z.object({
   email: z.string().email("Email invalide"),
   password: z.string().min(1, "Mot de passe requis"),

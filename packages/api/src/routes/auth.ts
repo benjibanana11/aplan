@@ -2,6 +2,7 @@ import { Router, type Request } from "express";
 import bcrypt from "bcrypt";
 import {
   registerSchema,
+  registerNewTeamSchema,
   loginSchema,
   changePasswordSchema,
   selectTeamSchema,
@@ -96,6 +97,45 @@ authRouter.post("/register", async (req, res) => {
     teamId: team.id,
     teamName: team.name,
     role: "EMPLOYEE",
+  };
+  finalizeSession(req.session, user.id, teamOption);
+  res.status(201).json(currentUserPayload(user, teamOption, [teamOption]));
+});
+
+authRouter.post("/register-team", async (req, res) => {
+  const parsed = registerNewTeamSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+  const { companyName, teamName, teamCode, name, email, password } = parsed.data;
+
+  const existingTeamCode = await prisma.team.findUnique({ where: { teamCode } });
+  if (existingTeamCode) {
+    res.status(409).json({ error: "Ce code d'équipe existe déjà" });
+    return;
+  }
+  const existingUser = await prisma.user.findUnique({ where: { email } });
+  if (existingUser) {
+    res.status(409).json({ error: "Un compte existe déjà avec cet email" });
+    return;
+  }
+
+  const passwordHash = await bcrypt.hash(password, 12);
+  const { user, team, company } = await prisma.$transaction(async (tx) => {
+    const company = await tx.company.create({ data: { name: companyName } });
+    const team = await tx.team.create({ data: { companyId: company.id, name: teamName, teamCode } });
+    const user = await tx.user.create({ data: { name, email, passwordHash, hireDate: new Date() } });
+    await tx.teamMembership.create({ data: { userId: user.id, teamId: team.id, role: "ADMIN", active: true } });
+    return { user, team, company };
+  });
+
+  const teamOption: TeamOption = {
+    companyId: company.id,
+    companyName: company.name,
+    teamId: team.id,
+    teamName: team.name,
+    role: "ADMIN",
   };
   finalizeSession(req.session, user.id, teamOption);
   res.status(201).json(currentUserPayload(user, teamOption, [teamOption]));

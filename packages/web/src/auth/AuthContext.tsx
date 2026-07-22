@@ -32,6 +32,14 @@ interface AuthContextValue {
   selectTeam: (teamId: string) => Promise<void>;
   switchTeam: (teamId: string) => Promise<void>;
   register: (teamCode: string, name: string, email: string, password: string) => Promise<void>;
+  registerNewTeam: (
+    companyName: string,
+    teamName: string,
+    teamCode: string,
+    name: string,
+    email: string,
+    password: string
+  ) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -84,6 +92,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(created);
   }
 
+  async function registerNewTeam(
+    companyName: string,
+    teamName: string,
+    teamCode: string,
+    name: string,
+    email: string,
+    password: string
+  ) {
+    const created = await api.post<CurrentUser>("/auth/register-team", {
+      companyName,
+      teamName,
+      teamCode,
+      name,
+      email,
+      password,
+    });
+    setUser(created);
+  }
+
   async function logout() {
     await api.post("/auth/logout");
     setUser(null);
@@ -91,7 +118,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <AuthContext.Provider value={{ user, loading, pendingTeams, login, selectTeam, switchTeam, register, logout }}>
+    <AuthContext.Provider
+      value={{ user, loading, pendingTeams, login, selectTeam, switchTeam, register, registerNewTeam, logout }}
+    >
       {children}
     </AuthContext.Provider>
   );
