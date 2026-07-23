@@ -43,9 +43,10 @@ export const taskInputSchema = z
     maxStaff: z.number().int().min(0),
     maxTraineeSlots: z.number().int().min(0),
     requiresTraining: z.boolean(),
-    // Tranches horaires à effectif variable ; vide = comportement plat (minStaff/targetStaff/maxStaff
-    // ci-dessus s'appliquent à toute la journée), non vide = ces trois champs sont ignorés par le
-    // moteur au profit des tranches. Non disponible pour allowedSlot === CUSTOM (voir refine ci-dessous).
+    // Tranches horaires à effectif variable ; minStaff/targetStaff/maxStaff ci-dessus restent utilisés
+    // comme valeurs par défaut pour toute heure de la journée non couverte par une tranche (vide = ces
+    // valeurs s'appliquent à toute la journée). Non disponible pour allowedSlot === CUSTOM (voir refine
+    // ci-dessous).
     staffingBands: z.array(staffingBandSchema).default([]),
   })
   .refine((data) => data.minStaff <= data.targetStaff && data.targetStaff <= data.maxStaff, {

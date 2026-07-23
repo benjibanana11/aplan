@@ -257,7 +257,7 @@ export function TaskForm({
         <span className="mb-1 block text-sm font-medium text-slate-700">Min / Cible / Max</span>
         {values.staffingBands.length > 0 && (
           <p className="mb-2 text-xs text-slate-500">
-            Ignorés tant que des tranches horaires sont définies ci-dessous.
+            Valeurs par défaut pour les heures non couvertes par une tranche ci-dessous.
           </p>
         )}
         <div className="grid grid-cols-3 gap-3">
@@ -310,8 +310,8 @@ export function TaskForm({
             </button>
           </div>
           <p className="mb-2 text-xs text-slate-500">
-            Ex. 4 personnes de 8h à 17h30, puis 1 seule après. Laisser vide pour utiliser Min/Cible/Max ci-dessus toute
-            la journée.
+            Ex. 4 personnes de 8h à 17h30, puis 1 seule après. Les heures non couvertes par une tranche utilisent
+            Min/Cible/Max ci-dessus.
           </p>
           {values.staffingBands.length > 0 && (
             <div className="flex flex-col gap-2">

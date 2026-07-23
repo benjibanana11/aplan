@@ -108,9 +108,10 @@ model Task {
 
 // Effectifs min/cible/max qui varient selon l'heure de la journée pour une même tâche (ex: 4
 // personnes de 8h à 17h30, puis 1 seule après) — voir bandedCapacityAt dans planningEngine.ts.
-// Une tâche utilise soit ses valeurs plates (minStaff/targetStaff/maxStaff ci-dessus), soit ses
-// tranches, jamais les deux à la fois ; non proposé pour les tâches en créneau CUSTOM (validé côté
-// schéma partagé, voir packages/shared/src/schemas/task.ts).
+// Task.minStaff/targetStaff/maxStaff restent utilisés comme valeurs par défaut pour toute heure de
+// la journée non couverte par une tranche ci-dessous (voir regionsForTask dans planningEngine.ts) ;
+// non proposé pour les tâches en créneau CUSTOM (validé côté schéma partagé, voir
+// packages/shared/src/schemas/task.ts).
 model TaskStaffingBand {
   id          String @id @default(cuid())
   taskId      String

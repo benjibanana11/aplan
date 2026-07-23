@@ -51,53 +51,76 @@ function clipToTaskWindow(task: TaskContext, segment: Segment, boundaries: SlotB
   return start < end ? { start, end } : null;
 }
 
+/**
+ * Full-day staffing regions for a task: its explicit bands, with any uncovered stretch of the day
+ * (before the first band, between two bands, or after the last band) filled in using the task's
+ * flat min/target/max — the "default" staffing level for hours nobody defined a band for. A task
+ * with no bands at all is just one region spanning the whole day.
+ */
+function regionsForTask(task: TaskContext): StaffingBand[] {
+  const fallback = { minStaff: task.minStaff, targetStaff: task.targetStaff, maxStaff: task.maxStaff };
+  if (task.staffingBands.length === 0) {
+    return [{ startMinutes: 0, endMinutes: DAY_MINUTES, ...fallback }];
+  }
+  const sorted = [...task.staffingBands].sort((a, b) => a.startMinutes - b.startMinutes);
+  const regions: StaffingBand[] = [];
+  let cursor = 0;
+  for (const band of sorted) {
+    if (cursor < band.startMinutes) {
+      regions.push({ startMinutes: cursor, endMinutes: band.startMinutes, ...fallback });
+    }
+    regions.push(band);
+    cursor = band.endMinutes;
+  }
+  if (cursor < DAY_MINUTES) {
+    regions.push({ startMinutes: cursor, endMinutes: DAY_MINUTES, ...fallback });
+  }
+  return regions;
+}
+
 /** A task's nominal (pre-cascade) peak concurrent target — the single "how many people does this
- * task want at its busiest moment" number used for cross-task cascading. For a flat task this is
- * just its targetStaff; for a banded task it's the highest targetStaff among its bands. */
+ * task want at its busiest moment" number used for cross-task cascading, across its bands AND
+ * whatever hours default to its flat targetStaff. */
 function nominalTarget(task: TaskContext): number {
-  return task.staffingBands.length > 0 ? Math.max(...task.staffingBands.map((b) => b.targetStaff)) : task.targetStaff;
+  return Math.max(...regionsForTask(task).map((r) => r.targetStaff));
 }
 
 function nominalMax(task: TaskContext): number {
-  return task.staffingBands.length > 0 ? Math.max(...task.staffingBands.map((b) => b.maxStaff)) : task.maxStaff;
+  return Math.max(...regionsForTask(task).map((r) => r.maxStaff));
 }
 
 /** The floor below which applyCascade must never reduce a task's target — the minStaff of
- * whichever band carries the peak target (for a flat task, just its minStaff). */
+ * whichever region carries the peak target. */
 function nominalMin(task: TaskContext): number {
-  if (task.staffingBands.length === 0) return task.minStaff;
-  const peak = nominalTarget(task);
-  const peakBands = task.staffingBands.filter((b) => b.targetStaff === peak);
-  return Math.max(...peakBands.map((b) => b.minStaff));
+  const regions = regionsForTask(task);
+  const peak = Math.max(...regions.map((r) => r.targetStaff));
+  const peakRegions = regions.filter((r) => r.targetStaff === peak);
+  return Math.max(...peakRegions.map((r) => r.minStaff));
 }
 
-function findBand(bands: StaffingBand[], minute: number): StaffingBand | undefined {
-  return bands.find((b) => minute >= b.startMinutes && minute < b.endMinutes);
+function findRegion(regions: StaffingBand[], minute: number): StaffingBand | undefined {
+  return regions.find((r) => minute >= r.startMinutes && minute < r.endMinutes);
 }
 
 /**
  * Builds a per-minute capacity function for one tier of a task's staffing requirement.
  * `tier: "targetStaff"` caps the main assignment pass; `tier: "maxStaff"` caps the leftover-time
- * complement pass (which is allowed to go beyond target, up to max, but ignores cascade). Outside
- * of any band, capacity is 0 — a task's day is only ever as wide as its bands say it is.
+ * complement pass (which is allowed to go beyond target, up to max, but ignores cascade). Hours not
+ * covered by any explicit band fall back to the task's flat min/target/max (see `regionsForTask`).
  * `reduceBy` is the absolute headcount trim from applyCascade (0 for the max tier, which cascade
- * never touches); applied per band, never below that band's own minimum.
+ * never touches); applied per region, never below that region's own minimum.
  */
 function bandedCapacityAt(
   task: TaskContext,
   tier: "targetStaff" | "maxStaff",
   reduceBy: number
 ): (minute: number) => number {
-  if (task.staffingBands.length === 0) {
-    const base = tier === "targetStaff" ? task.targetStaff : task.maxStaff;
-    const value = tier === "targetStaff" ? Math.max(0, base - reduceBy) : base;
-    return () => value;
-  }
+  const regions = regionsForTask(task);
   return (minute: number) => {
-    const band = findBand(task.staffingBands, minute);
-    if (!band) return 0;
-    const base = tier === "targetStaff" ? band.targetStaff : band.maxStaff;
-    return tier === "targetStaff" ? Math.max(band.minStaff, base - reduceBy) : base;
+    const region = findRegion(regions, minute);
+    if (!region) return 0;
+    const base = tier === "targetStaff" ? region.targetStaff : region.maxStaff;
+    return tier === "targetStaff" ? Math.max(region.minStaff, base - reduceBy) : base;
   };
 }
 
@@ -411,15 +434,12 @@ export function generatePlanning(context: DayContext): PlanningResult {
   for (const task of sortedTasks) {
     const target = Math.min(effectiveTargets.get(task.id) ?? nominalTarget(task), nominalMax(task));
     const reduceBy = Math.max(0, nominalTarget(task) - target);
-    const regions =
-      task.staffingBands.length > 0
-        ? task.staffingBands.map((band) => ({
-            startMinutes: band.startMinutes,
-            endMinutes: band.endMinutes,
-            minStaff: band.minStaff,
-            effectiveTarget: Math.max(band.minStaff, band.targetStaff - reduceBy),
-          }))
-        : [{ startMinutes: 0, endMinutes: DAY_MINUTES, minStaff: task.minStaff, effectiveTarget: target }];
+    const regions = regionsForTask(task).map((region) => ({
+      startMinutes: region.startMinutes,
+      endMinutes: region.endMinutes,
+      minStaff: region.minStaff,
+      effectiveTarget: Math.max(region.minStaff, region.targetStaff - reduceBy),
+    }));
 
     for (const region of regions) {
       const peak = staffOccupancy.peakOccupancy(task.id, region.startMinutes, region.endMinutes);

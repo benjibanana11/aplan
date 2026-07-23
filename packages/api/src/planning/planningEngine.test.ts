@@ -547,4 +547,61 @@ describe("generatePlanning", () => {
     expect(countAt("09:00")).toBe(4);
     expect(countAt("18:00")).toBe(1);
   });
+
+  it("uses the task's flat min/target/max as the default for hours not covered by any staffing band", () => {
+    const task = makeTask({
+      id: "t1",
+      priorityRank: 1,
+      requiresTraining: false,
+      maxContinuousMinutes: 480,
+      minStaff: 0,
+      targetStaff: 1,
+      maxStaff: 1,
+      // Only 09:00-13:00 has a band; 08:00-09:00 and 13:00-16:00 are left uncovered and must fall
+      // back to the flat targetStaff (1) above instead of being unstaffed (0).
+      staffingBands: [
+        { startMinutes: timeToMinutes("09:00"), endMinutes: timeToMinutes("13:00"), minStaff: 0, targetStaff: 3, maxStaff: 3 },
+      ],
+    });
+    const employees = Array.from({ length: 3 }, (_, i) =>
+      makeEmployee({ id: `e${i}`, startMinutes: timeToMinutes("08:00"), endMinutes: timeToMinutes("16:00") })
+    );
+    const context = makeContext({ employees, tasks: [task] });
+
+    const result = generatePlanning(context);
+
+    const countAt = (time: string) => {
+      const m = timeToMinutes(time);
+      return result.blocks.filter(
+        (b) => b.taskId === "t1" && timeToMinutes(b.startTime) <= m && m < timeToMinutes(b.endTime)
+      ).length;
+    };
+    expect(countAt("08:30")).toBe(1); // before the band: flat target (1)
+    expect(countAt("10:00")).toBe(3); // inside the band
+    expect(countAt("14:00")).toBe(1); // after the band: flat target (1) again
+  });
+
+  it("alerts on the flat minStaff for hours not covered by any staffing band, separately from the band's own minStaff", () => {
+    const task = makeTask({
+      id: "t1",
+      priorityRank: 1,
+      requiresTraining: false,
+      minStaff: 1,
+      targetStaff: 1,
+      maxStaff: 1,
+      staffingBands: [
+        { startMinutes: timeToMinutes("09:00"), endMinutes: timeToMinutes("13:00"), minStaff: 0, targetStaff: 1, maxStaff: 1 },
+      ],
+    });
+    // No employees at all, so nothing can ever be staffed anywhere.
+    const context = makeContext({ employees: [], tasks: [task] });
+
+    const result = generatePlanning(context);
+
+    // The band itself requires minStaff 0 (no alert), but the uncovered hours default to the
+    // flat minStaff of 1 and must alert on their own.
+    const gapAlerts = result.alerts.filter((a) => a.taskId === "t1" && a.message.includes("0/1"));
+    expect(gapAlerts.length).toBeGreaterThan(0);
+    expect(result.alerts.some((a) => a.taskId === "t1" && a.message.includes("0/0"))).toBe(false);
+  });
 });
