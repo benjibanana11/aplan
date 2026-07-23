@@ -316,68 +316,75 @@ export function TaskForm({
           {values.staffingBands.length > 0 && (
             <div className="flex flex-col gap-2">
               {values.staffingBands.map((band, index) => (
-                <div key={index} className="flex items-end gap-2 rounded-lg border border-slate-200 p-2">
-                  <label className={labelClass}>
-                    Début
-                    <input
-                      type="time"
-                      value={band.startTime}
-                      onChange={(e) => updateBand(index, { startTime: e.target.value })}
-                      required
-                      className={inputClass}
-                    />
-                  </label>
-                  <label className={labelClass}>
-                    Fin
-                    <input
-                      type="time"
-                      value={band.endTime}
-                      onChange={(e) => updateBand(index, { endTime: e.target.value })}
-                      required
-                      className={inputClass}
-                    />
-                  </label>
-                  <label className={labelClass}>
-                    Min
-                    <input
-                      type="number"
-                      min={0}
-                      value={band.minStaff}
-                      onChange={(e) => updateBand(index, { minStaff: Number(e.target.value) })}
-                      required
-                      className={inputClass}
-                    />
-                  </label>
-                  <label className={labelClass}>
-                    Cible
-                    <input
-                      type="number"
-                      min={0}
-                      value={band.targetStaff}
-                      onChange={(e) => updateBand(index, { targetStaff: Number(e.target.value) })}
-                      required
-                      className={inputClass}
-                    />
-                  </label>
-                  <label className={labelClass}>
-                    Max
-                    <input
-                      type="number"
-                      min={0}
-                      value={band.maxStaff}
-                      onChange={(e) => updateBand(index, { maxStaff: Number(e.target.value) })}
-                      required
-                      className={inputClass}
-                    />
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => removeBand(index)}
-                    className="mb-1 rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600"
-                    aria-label="Supprimer la tranche"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
+                <div key={index} className="flex flex-col gap-2 rounded-lg border border-slate-200 p-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium text-slate-500">Tranche {index + 1}</span>
+                    <button
+                      type="button"
+                      onClick={() => removeBand(index)}
+                      className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600"
+                      aria-label="Supprimer la tranche"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <label className={labelClass}>
+                      Début
+                      <input
+                        type="time"
+                        value={band.startTime}
+                        onChange={(e) => updateBand(index, { startTime: e.target.value })}
+                        required
+                        className={inputClass}
+                      />
+                    </label>
+                    <label className={labelClass}>
+                      Fin
+                      <input
+                        type="time"
+                        value={band.endTime}
+                        onChange={(e) => updateBand(index, { endTime: e.target.value })}
+                        required
+                        className={inputClass}
+                      />
+                    </label>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <label className={labelClass}>
+                      Min
+                      <input
+                        type="number"
+                        min={0}
+                        value={band.minStaff}
+                        onChange={(e) => updateBand(index, { minStaff: Number(e.target.value) })}
+                        required
+                        className={inputClass}
+                      />
+                    </label>
+                    <label className={labelClass}>
+                      Cible
+                      <input
+                        type="number"
+                        min={0}
+                        value={band.targetStaff}
+                        onChange={(e) => updateBand(index, { targetStaff: Number(e.target.value) })}
+                        required
+                        className={inputClass}
+                      />
+                    </label>
+                    <label className={labelClass}>
+                      Max
+                      <input
+                        type="number"
+                        min={0}
+                        value={band.maxStaff}
+                        onChange={(e) => updateBand(index, { maxStaff: Number(e.target.value) })}
+                        required
+                        className={inputClass}
+                      />
+                    </label>
+                  </div>
                 </div>
               ))}
             </div>
