@@ -90,7 +90,10 @@ export function DashboardPage() {
                 className="flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800"
               >
                 <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-                {alert.message}
+                <span>
+                  {alert.taskName !== "—" && <span className="font-semibold">{alert.taskName} — </span>}
+                  {alert.message}
+                </span>
               </li>
             ))}
             {unresolvedAbsences.map((absence) => (
