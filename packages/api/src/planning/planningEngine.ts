@@ -102,6 +102,37 @@ function findRegion(regions: StaffingBand[], minute: number): StaffingBand | und
   return regions.find((r) => minute >= r.startMinutes && minute < r.endMinutes);
 }
 
+function intersect(a: Segment, b: Segment): Segment | null {
+  const start = Math.max(a.start, b.start);
+  const end = Math.min(a.end, b.end);
+  return start < end ? { start, end } : null;
+}
+
+/**
+ * Merges every employee's scheduled shift for the day into the smallest set of disjoint
+ * intervals — the actual hours someone from the team is present at all. Used to keep minStaff
+ * alerts scoped to hours the team could conceivably staff: a task's nominal day-wide region (or a
+ * gap region defaulting to the flat min/target/max) can span hours nobody is even scheduled to
+ * work, and reporting a "deficit" there would just be noise about a structurally impossible slot,
+ * not a real staffing problem.
+ */
+function teamCoverage(employees: EmployeeContext[]): Segment[] {
+  const sorted = employees
+    .map((e) => ({ start: e.startMinutes, end: e.endMinutes }))
+    .filter((s) => s.start < s.end)
+    .sort((a, b) => a.start - b.start);
+  const merged: Segment[] = [];
+  for (const seg of sorted) {
+    const last = merged[merged.length - 1];
+    if (last && seg.start <= last.end) {
+      last.end = Math.max(last.end, seg.end);
+    } else {
+      merged.push({ ...seg });
+    }
+  }
+  return merged;
+}
+
 /**
  * Builds a per-minute capacity function for one tier of a task's staffing requirement.
  * `tier: "targetStaff"` caps the main assignment pass; `tier: "maxStaff"` caps the leftover-time
@@ -430,7 +461,10 @@ export function generatePlanning(context: DayContext): PlanningResult {
   // Alertes d'effectif minimum : évaluées une fois toutes les passes terminées (la deuxième passe
   // peut encore compléter l'effectif d'une tâche), sur le pic de personnes réellement en même temps
   // — une par tranche horaire pour une tâche qui en a, sinon une seule pour toute sa journée, pour
-  // qu'un déficit du soir ne reste jamais masqué par un excédent du matin.
+  // qu'un déficit du soir ne reste jamais masqué par un excédent du matin. Chaque région est en
+  // plus recadrée sur les heures où l'équipe est réellement présente (teamCoverage) : hors de tout
+  // horaire d'employé, un "déficit" n'en est pas un — personne ne peut de toute façon y être affecté.
+  const coverage = teamCoverage(context.employees);
   for (const task of sortedTasks) {
     const target = Math.min(effectiveTargets.get(task.id) ?? nominalTarget(task), nominalMax(task));
     const reduceBy = Math.max(0, nominalTarget(task) - target);
@@ -442,17 +476,17 @@ export function generatePlanning(context: DayContext): PlanningResult {
     }));
 
     for (const region of regions) {
-      const peak = staffOccupancy.peakOccupancy(task.id, region.startMinutes, region.endMinutes);
-      if (peak < region.minStaff) {
-        const label =
-          task.staffingBands.length > 0
-            ? ` de ${minutesToTime(region.startMinutes)} à ${minutesToTime(region.endMinutes)}`
-            : "";
-        alerts.push({
-          taskId: task.id,
-          taskName: task.name,
-          message: `Effectif minimum non atteint${label} : ${peak}/${region.minStaff} personnes en même temps (cible ${region.effectiveTarget}).`,
-        });
+      for (const cov of coverage) {
+        const overlap = intersect({ start: region.startMinutes, end: region.endMinutes }, cov);
+        if (!overlap) continue;
+        const peak = staffOccupancy.peakOccupancy(task.id, overlap.start, overlap.end);
+        if (peak < region.minStaff) {
+          alerts.push({
+            taskId: task.id,
+            taskName: task.name,
+            message: `Effectif minimum non atteint de ${minutesToTime(overlap.start)} à ${minutesToTime(overlap.end)} : ${peak}/${region.minStaff} personnes en même temps (cible ${region.effectiveTarget}).`,
+          });
+        }
       }
     }
   }

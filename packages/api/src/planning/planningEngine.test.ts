@@ -581,11 +581,11 @@ describe("generatePlanning", () => {
     expect(countAt("14:00")).toBe(1); // after the band: flat target (1) again
   });
 
-  it("alerts on the flat minStaff for hours not covered by any staffing band, separately from the band's own minStaff", () => {
+  it("alerts on the flat minStaff for hours not covered by any staffing band, separately from the band's own minStaff, but only during actual working hours", () => {
     const task = makeTask({
       id: "t1",
       priorityRank: 1,
-      requiresTraining: false,
+      requiresTraining: true, // nobody is trained, so it never actually gets staffed
       minStaff: 1,
       targetStaff: 1,
       maxStaff: 1,
@@ -593,15 +593,43 @@ describe("generatePlanning", () => {
         { startMinutes: timeToMinutes("09:00"), endMinutes: timeToMinutes("13:00"), minStaff: 0, targetStaff: 1, maxStaff: 1 },
       ],
     });
-    // No employees at all, so nothing can ever be staffed anywhere.
-    const context = makeContext({ employees: [], tasks: [task] });
+    // Present (defines the team's working hours for the day) but untrained, so occupancy stays 0
+    // everywhere while the shift still exists.
+    const employee = makeEmployee({ id: "e1", startMinutes: timeToMinutes("08:00"), endMinutes: timeToMinutes("16:00") });
+    const context = makeContext({ employees: [employee], tasks: [task] });
 
     const result = generatePlanning(context);
 
-    // The band itself requires minStaff 0 (no alert), but the uncovered hours default to the
-    // flat minStaff of 1 and must alert on their own.
+    // The band itself requires minStaff 0 (no alert), but the covered gap hours (08:00-09:00 and
+    // 13:00-16:00, within the employee's actual shift) default to the flat minStaff of 1 and must
+    // alert on their own.
     const gapAlerts = result.alerts.filter((a) => a.taskId === "t1" && a.message.includes("0/1"));
     expect(gapAlerts.length).toBeGreaterThan(0);
     expect(result.alerts.some((a) => a.taskId === "t1" && a.message.includes("0/0"))).toBe(false);
+  });
+
+  it("never alerts on minStaff for hours nobody is scheduled to work at all (regression: bogus 00:00-09:00/21:00-24:00 alerts)", () => {
+    const task = makeTask({
+      id: "t1",
+      priorityRank: 1,
+      requiresTraining: true, // nobody is trained, so it never actually gets staffed
+      minStaff: 1,
+      targetStaff: 2,
+      maxStaff: 2,
+    });
+    // The whole team only ever works 08:00-20:00 — the task's nominal day-wide region spans
+    // 00:00-24:00, but nobody is ever scheduled outside 08:00-20:00.
+    const employees = [
+      makeEmployee({ id: "e1", startMinutes: timeToMinutes("08:00"), endMinutes: timeToMinutes("20:00") }),
+      makeEmployee({ id: "e2", startMinutes: timeToMinutes("08:00"), endMinutes: timeToMinutes("20:00") }),
+    ];
+    const context = makeContext({ employees, tasks: [task] });
+
+    const result = generatePlanning(context);
+
+    const taskAlerts = result.alerts.filter((a) => a.taskId === "t1");
+    expect(taskAlerts.length).toBeGreaterThan(0); // still unstaffed within the actual shift
+    expect(taskAlerts.every((a) => !a.message.includes("00:00") && !a.message.includes("24:00"))).toBe(true);
+    expect(taskAlerts.some((a) => a.message.includes("08:00") && a.message.includes("20:00"))).toBe(true);
   });
 });
