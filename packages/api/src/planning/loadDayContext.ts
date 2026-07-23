@@ -1,7 +1,7 @@
 import type { AllowedSlot, SkillStatus } from "@aplan/shared";
 import { prisma } from "../db.js";
 import { parseDateOnly, timeToMinutes } from "./time.js";
-import type { DayContext, EmployeeContext, EquityStats, TaskContext } from "./types.js";
+import type { DayContext, EmployeeContext, EquityStats, StaffingBand, TaskContext } from "./types.js";
 
 const EQUITY_WINDOW_DAYS = 30;
 const MORNING_END_TIME = "13:00";
@@ -27,7 +27,7 @@ export async function loadDayContext(teamId: string, date: string): Promise<DayC
       },
       include: { employee: { select: { id: true, name: true } } },
     }),
-    prisma.task.findMany({ where: { teamId } }),
+    prisma.task.findMany({ where: { teamId }, include: { staffingBands: true } }),
     prisma.employeeTaskSkill.findMany({
       where: { teamId },
       select: { employeeId: true, taskId: true, status: true },
@@ -109,20 +109,33 @@ export async function loadDayContext(teamId: string, date: string): Promise<DayC
 
   const equity: EquityStats = { countByEmployeeTask, teamAverageByTask };
 
-  const taskContexts: TaskContext[] = tasks.map((task) => ({
-    id: task.id,
-    name: task.name,
-    priorityRank: task.priorityRank,
-    allowedSlot: task.allowedSlot as AllowedSlot,
-    customStartMinutes: task.customStartTime ? timeToMinutes(task.customStartTime) : undefined,
-    customEndMinutes: task.customEndTime ? timeToMinutes(task.customEndTime) : undefined,
-    maxContinuousMinutes: task.maxContinuousMinutes,
-    minStaff: task.minStaff,
-    targetStaff: task.targetStaff,
-    maxStaff: task.maxStaff,
-    maxTraineeSlots: task.maxTraineeSlots,
-    requiresTraining: task.requiresTraining,
-  }));
+  const taskContexts: TaskContext[] = tasks.map((task) => {
+    const staffingBands: StaffingBand[] = task.staffingBands
+      .map((band) => ({
+        startMinutes: timeToMinutes(band.startTime),
+        endMinutes: timeToMinutes(band.endTime),
+        minStaff: band.minStaff,
+        targetStaff: band.targetStaff,
+        maxStaff: band.maxStaff,
+      }))
+      .sort((a, b) => a.startMinutes - b.startMinutes);
+    return {
+      id: task.id,
+      name: task.name,
+      priorityRank: task.priorityRank,
+      allowedSlot: task.allowedSlot as AllowedSlot,
+      customStartMinutes: task.customStartTime ? timeToMinutes(task.customStartTime) : undefined,
+      customEndMinutes: task.customEndTime ? timeToMinutes(task.customEndTime) : undefined,
+      maxContinuousMinutes: task.maxContinuousMinutes,
+      minContinuousMinutes: task.minContinuousMinutes,
+      minStaff: task.minStaff,
+      targetStaff: task.targetStaff,
+      maxStaff: task.maxStaff,
+      maxTraineeSlots: task.maxTraineeSlots,
+      requiresTraining: task.requiresTraining,
+      staffingBands,
+    };
+  });
 
   return {
     date,

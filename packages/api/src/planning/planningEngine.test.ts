@@ -470,4 +470,81 @@ describe("generatePlanning", () => {
       expect(secondBlocks[i].startTime).toBe(secondBlocks[i - 1].endTime);
     }
   });
+
+  it("keeps scanning within the same free segment for a long-enough window when the first available slot is too short (minContinuousMinutes)", () => {
+    const task = makeTask({
+      id: "t1",
+      priorityRank: 1,
+      requiresTraining: false,
+      minContinuousMinutes: 60,
+      maxContinuousMinutes: 480,
+      staffingBands: [
+        { startMinutes: timeToMinutes("08:00"), endMinutes: timeToMinutes("08:20"), minStaff: 0, targetStaff: 1, maxStaff: 1 },
+        { startMinutes: timeToMinutes("08:20"), endMinutes: timeToMinutes("08:50"), minStaff: 0, targetStaff: 0, maxStaff: 0 },
+        { startMinutes: timeToMinutes("08:50"), endMinutes: timeToMinutes("10:00"), minStaff: 0, targetStaff: 1, maxStaff: 1 },
+      ],
+    });
+    const employee = makeEmployee({ id: "e1", startMinutes: timeToMinutes("08:00"), endMinutes: timeToMinutes("10:00") });
+    const context = makeContext({ employees: [employee], tasks: [task] });
+
+    const result = generatePlanning(context);
+
+    const block = result.blocks.find((b) => b.taskId === "t1");
+    // The first 20 minutes (08:00-08:20) are available but too short to satisfy the 60-minute
+    // minimum, and the task is unstaffed (target 0) from 08:20-08:50 — the engine must not give up
+    // on the segment after that first too-short slot, and instead find the 70-minute window from
+    // 08:50 onward that does satisfy the minimum.
+    expect(block).toMatchObject({ startTime: "08:50", endTime: "10:00" });
+  });
+
+  it("never places a block shorter than its task's minContinuousMinutes, even when that's the only immediately available slot", () => {
+    const task = makeTask({
+      id: "t1",
+      priorityRank: 1,
+      requiresTraining: false,
+      minContinuousMinutes: 60,
+      maxContinuousMinutes: 480,
+      targetStaff: 1,
+      maxStaff: 1,
+    });
+    // "short" only has 30 minutes available — never enough to satisfy the 60-minute minimum.
+    const short = makeEmployee({ id: "short", startMinutes: timeToMinutes("08:00"), endMinutes: timeToMinutes("08:30") });
+    const long = makeEmployee({ id: "long", startMinutes: timeToMinutes("08:00"), endMinutes: timeToMinutes("16:00") });
+    const context = makeContext({ employees: [short, long], tasks: [task] });
+
+    const result = generatePlanning(context);
+
+    expect(result.blocks.some((b) => b.employeeId === "short" && b.taskId === "t1")).toBe(false);
+    const longBlock = result.blocks.find((b) => b.employeeId === "long" && b.taskId === "t1");
+    expect(longBlock).toBeDefined();
+    expect(timeToMinutes(longBlock!.endTime) - timeToMinutes(longBlock!.startTime)).toBeGreaterThanOrEqual(60);
+  });
+
+  it("staffs a task at each band's own target on either side of a time boundary, not the earlier band's max (regression: user-reported case of 4 people 8h-17h30, 1 person after)", () => {
+    const encodage = makeTask({
+      id: "encodage",
+      priorityRank: 1,
+      requiresTraining: false,
+      maxContinuousMinutes: 720,
+      staffingBands: [
+        { startMinutes: timeToMinutes("08:00"), endMinutes: timeToMinutes("17:30"), minStaff: 0, targetStaff: 4, maxStaff: 4 },
+        { startMinutes: timeToMinutes("17:30"), endMinutes: timeToMinutes("20:00"), minStaff: 0, targetStaff: 1, maxStaff: 1 },
+      ],
+    });
+    const employees = Array.from({ length: 5 }, (_, i) =>
+      makeEmployee({ id: `e${i}`, startMinutes: timeToMinutes("08:00"), endMinutes: timeToMinutes("20:00") })
+    );
+    const context = makeContext({ employees, tasks: [encodage] });
+
+    const result = generatePlanning(context);
+
+    const countAt = (time: string) => {
+      const m = timeToMinutes(time);
+      return result.blocks.filter(
+        (b) => b.taskId === "encodage" && timeToMinutes(b.startTime) <= m && m < timeToMinutes(b.endTime)
+      ).length;
+    };
+    expect(countAt("09:00")).toBe(4);
+    expect(countAt("18:00")).toBe(1);
+  });
 });

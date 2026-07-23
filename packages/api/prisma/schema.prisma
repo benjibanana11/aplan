@@ -85,6 +85,10 @@ model Task {
   customStartTime     String?
   customEndTime       String?
   maxContinuousMinutes Int
+  // 0 = pas de contrainte (comportement historique). N'a de sens que si l'employé dispose d'assez
+  // de temps continu ; sinon la tâche est simplement ignorée pour lui pour ce créneau, voir
+  // Occupancy.findWindow dans planningEngine.ts.
+  minContinuousMinutes Int         @default(0)
   minStaff            Int
   targetStaff         Int
   maxStaff            Int
@@ -96,9 +100,28 @@ model Task {
   skills            EmployeeTaskSkill[]
   planningBlocks    PlanningBlock[]
   trainingHoursLogs TrainingHoursLog[]
+  staffingBands     TaskStaffingBand[]
 
   @@unique([teamId, priorityRank])
   @@index([teamId])
+}
+
+// Effectifs min/cible/max qui varient selon l'heure de la journée pour une même tâche (ex: 4
+// personnes de 8h à 17h30, puis 1 seule après) — voir bandedCapacityAt dans planningEngine.ts.
+// Une tâche utilise soit ses valeurs plates (minStaff/targetStaff/maxStaff ci-dessus), soit ses
+// tranches, jamais les deux à la fois ; non proposé pour les tâches en créneau CUSTOM (validé côté
+// schéma partagé, voir packages/shared/src/schemas/task.ts).
+model TaskStaffingBand {
+  id          String @id @default(cuid())
+  taskId      String
+  task        Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  startTime   String
+  endTime     String
+  minStaff    Int
+  targetStaff Int
+  maxStaff    Int
+
+  @@index([taskId])
 }
 
 model EmployeeTaskSkill {

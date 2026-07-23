@@ -9,11 +9,13 @@ export function makeTask(overrides: Partial<TaskContext> & { id: string; priorit
     name: overrides.id,
     allowedSlot: "ALL_DAY",
     maxContinuousMinutes: 480,
+    minContinuousMinutes: 0,
     minStaff: 0,
     targetStaff: 1,
     maxStaff: 10,
     maxTraineeSlots: 0,
     requiresTraining: true,
+    staffingBands: [],
     ...overrides,
   };
 }

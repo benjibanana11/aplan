@@ -9,6 +9,7 @@ tasksRouter.get("/", requireAuth, async (req, res) => {
   const tasks = await prisma.task.findMany({
     where: { teamId: req.session.teamId },
     orderBy: { priorityRank: "asc" },
+    include: { staffingBands: true },
   });
   res.json(tasks);
 });
@@ -20,6 +21,7 @@ tasksRouter.post("/", requireAdmin, async (req, res) => {
     return;
   }
 
+  const { staffingBands, ...scalarFields } = parsed.data;
   const teamId = req.session.teamId!;
   const task = await prisma.$transaction(async (tx) => {
     const maxRank = await tx.task.aggregate({
@@ -28,10 +30,12 @@ tasksRouter.post("/", requireAdmin, async (req, res) => {
     });
     return tx.task.create({
       data: {
-        ...parsed.data,
+        ...scalarFields,
         teamId,
         priorityRank: (maxRank._max.priorityRank ?? 0) + 1,
+        staffingBands: { create: staffingBands },
       },
+      include: { staffingBands: true },
     });
   });
   res.status(201).json(task);
@@ -52,7 +56,15 @@ tasksRouter.put("/:id", requireAdmin, async (req, res) => {
     return;
   }
 
-  const task = await prisma.task.update({ where: { id: existing.id }, data: parsed.data });
+  const { staffingBands, ...scalarFields } = parsed.data;
+  const task = await prisma.task.update({
+    where: { id: existing.id },
+    data: {
+      ...scalarFields,
+      staffingBands: { deleteMany: {}, create: staffingBands },
+    },
+    include: { staffingBands: true },
+  });
   res.json(task);
 });
 

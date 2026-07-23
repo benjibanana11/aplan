@@ -14,6 +14,14 @@ export interface EmployeeContext {
   yesterdayTaskIds: string[];
 }
 
+export interface StaffingBand {
+  startMinutes: number;
+  endMinutes: number;
+  minStaff: number;
+  targetStaff: number;
+  maxStaff: number;
+}
+
 export interface TaskContext {
   id: string;
   name: string;
@@ -22,11 +30,15 @@ export interface TaskContext {
   customStartMinutes?: number;
   customEndMinutes?: number;
   maxContinuousMinutes: number;
+  /** 0 = pas de contrainte. Voir Occupancy.findWindow dans planningEngine.ts. */
+  minContinuousMinutes: number;
   minStaff: number;
   targetStaff: number;
   maxStaff: number;
   maxTraineeSlots: number;
   requiresTraining: boolean;
+  /** Vide = comportement plat (minStaff/targetStaff/maxStaff s'appliquent toute la journée). */
+  staffingBands: StaffingBand[];
 }
 
 export interface EquityStats {
