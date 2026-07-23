@@ -5,6 +5,7 @@ import { requireAuth, requireAdmin } from "../middleware/requireAuth.js";
 import { loadDayContext } from "../planning/loadDayContext.js";
 import { generatePlanning } from "../planning/planningEngine.js";
 import { parseDateOnly } from "../planning/time.js";
+import { reconcileTrainingHours } from "../planning/reconcileTrainingHours.js";
 
 export const planningRouter = Router();
 
@@ -106,6 +107,11 @@ planningRouter.post("/validate", requireAdmin, async (req, res) => {
       })),
     }),
   ]);
+
+  // Incrémente (ou corrige, si ce jour était déjà validé) les heures de formation des employés
+  // EN_FORMATION en fonction des blocs "en formation" validés ci-dessus — voir reconcileTrainingHours.ts
+  // pour la logique d'idempotence qui évite de compter plusieurs fois la même journée.
+  await reconcileTrainingHours(teamId, day, blocks);
 
   res.json(await fetchPersistedBlocks(teamId, day));
 });

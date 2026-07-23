@@ -33,6 +33,7 @@ model Team {
   planningBlocks  PlanningBlock[]
   absences        Absence[]
   employeeTaskSkills EmployeeTaskSkill[]
+  trainingHoursLogs  TrainingHoursLog[]
 
   @@index([companyId])
 }
@@ -70,6 +71,7 @@ model User {
   absences          Absence[]           @relation("AbsentUser")
   suggestedFor      Absence[]           @relation("SuggestedReplacement")
   validatedAbsences Absence[]           @relation("AbsenceValidator")
+  trainingHoursLogs TrainingHoursLog[]
 }
 
 model Task {
@@ -91,8 +93,9 @@ model Task {
   priorityRank        Int
   createdAt           DateTime    @default(now())
 
-  skills          EmployeeTaskSkill[]
-  planningBlocks  PlanningBlock[]
+  skills            EmployeeTaskSkill[]
+  planningBlocks    PlanningBlock[]
+  trainingHoursLogs TrainingHoursLog[]
 
   @@unique([teamId, priorityRank])
   @@index([teamId])
@@ -113,6 +116,26 @@ model EmployeeTaskSkill {
   validatedBy     User?       @relation("SkillValidator", fields: [validatedByUserId], references: [id], onDelete: SetNull)
 
   @@id([employeeId, taskId])
+  @@index([teamId])
+}
+
+// Une ligne par (employé, tâche, jour) où au moins un bloc de planning "en formation" a été
+// validé — sert uniquement à rendre l'incrémentation de EmployeeTaskSkill.hoursCompleted idempotente :
+// re-valider le même jour (retouche manuelle, recalcul suite à absence) ne doit ni additionner ni
+// perdre des heures, seul l'écart avec la dernière validation connue de ce jour est appliqué.
+// Voir reconcileTrainingHours.ts.
+model TrainingHoursLog {
+  id         String   @id @default(cuid())
+  employeeId String
+  employee   User     @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  taskId     String
+  task       Task     @relation(fields: [taskId], references: [id])
+  teamId     String
+  team       Team     @relation(fields: [teamId], references: [id])
+  date       DateTime
+  hours      Float
+
+  @@unique([employeeId, taskId, date])
   @@index([teamId])
 }
 
