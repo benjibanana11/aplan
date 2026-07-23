@@ -156,6 +156,34 @@ function bandedCapacityAt(
 }
 
 /**
+ * The smallest minContinuousMinutes among tasks `employee` could still be placed on today (trained,
+ * not `currentTask` itself, not already assigned, not CUSTOM-slot — a fixed exact window isn't a
+ * candidate for soaking up an arbitrary leftover). 0 if there's no such task, meaning any leftover
+ * is fine (nothing needs protecting). Used to stop the greedy max-length placement of one task from
+ * stranding a remainder too short for anything else to ever fill — see findWindow's
+ * `minFillableLeftover` parameter.
+ */
+function minFillableLeftoverFor(
+  employee: EmployeeContext,
+  currentTask: TaskContext,
+  allTasks: TaskContext[],
+  assignedTasksToday: Map<string, Set<string>>
+): number {
+  const already = assignedTasksToday.get(employee.id)!;
+  const candidates = allTasks
+    .filter(
+      (t) =>
+        t.id !== currentTask.id &&
+        t.minContinuousMinutes > 0 &&
+        t.allowedSlot !== "CUSTOM" &&
+        !already.has(t.id) &&
+        isTrained(employee, t)
+    )
+    .map((t) => t.minContinuousMinutes);
+  return candidates.length > 0 ? Math.min(...candidates) : 0;
+}
+
+/**
  * Tracks how many people are concurrently occupying a task at each minute of the day, so
  * min/target/max staffing can be enforced as "at the same time", not as a running daily total.
  */
@@ -178,13 +206,22 @@ class Occupancy {
    * for a later window that's long enough, rather than giving up on the whole segment — a short
    * gap at the start of an otherwise-wide-open segment shouldn't block a valid placement further in.
    * Returns null if no window satisfying `minDuration` exists anywhere in `segment`.
+   *
+   * If placing the found window at its natural (greedy-max) length would leave a positive leftover
+   * in `segment` shorter than `minFillableLeftover`, the window is shrunk instead — never below
+   * `minDuration` — so the leftover becomes exactly `minFillableLeftover`, wide enough for whatever
+   * that value represents (typically some other task's own minimum) to actually use it. If shrinking
+   * that far isn't possible without going under `minDuration`, the leftover is unavoidable either
+   * way, so the natural window is kept — a real capacity/max-duration constraint always wins over
+   * this preference.
    */
   findWindow(
     taskId: string,
     segment: Segment,
     capacityAt: (minute: number) => number,
     maxDuration: number,
-    minDuration = 0
+    minDuration = 0,
+    minFillableLeftover = 0
   ): Segment | null {
     const arr = this.array(taskId);
     let searchStart = segment.start;
@@ -200,8 +237,16 @@ class Occupancy {
       const cap = Math.min(segment.end, start + maxDuration);
       let end = start;
       while (end < cap && arr[end] < capacityAt(end)) end++;
-      if (end - start >= minDuration) return { start, end };
-      searchStart = end;
+      if (end - start < minDuration) {
+        searchStart = end;
+        continue;
+      }
+      const leftover = segment.end - end;
+      if (leftover > 0 && leftover < minFillableLeftover) {
+        const maxLengthAvoidingGap = segment.end - start - minFillableLeftover;
+        if (maxLengthAvoidingGap >= minDuration) end = start + maxLengthAvoidingGap;
+      }
+      return { start, end };
     }
     return null;
   }
@@ -302,6 +347,11 @@ export function generatePlanning(context: DayContext): PlanningResult {
     describe: (placed: Segment) => { justification: string; isTraining: boolean; trainerName: string | null }
   ): Segment | null {
     const segments = remaining.get(employee.id)!;
+    // Combien de temps il faut au minimum réserver pour qu'une AUTRE tâche formée de cet employé
+    // reste plaçable après celle-ci — évite qu'un bloc pris à sa durée max ne laisse un reliquat trop
+    // court pour quoi que ce soit d'autre (ex: 4h30 pris sur un shift de 8h avec un minimum de 4h
+    // ailleurs, qui laisserait 3h30 inutilisables).
+    const minFillableLeftover = minFillableLeftoverFor(employee, task, context.tasks, assignedTasksToday);
     for (let i = 0; i < segments.length; i++) {
       const windowSeg = clipToTaskWindow(task, segments[i], slotBoundaries);
       if (!windowSeg) continue;
@@ -312,7 +362,14 @@ export function generatePlanning(context: DayContext): PlanningResult {
           ? occupancy.hasRoom(task.id, windowSeg, capacityAt)
             ? windowSeg
             : null
-          : occupancy.findWindow(task.id, windowSeg, capacityAt, task.maxContinuousMinutes, minDuration);
+          : occupancy.findWindow(
+              task.id,
+              windowSeg,
+              capacityAt,
+              task.maxContinuousMinutes,
+              minDuration,
+              minFillableLeftover
+            );
       if (!avail) continue;
 
       occupancy.reserve(task.id, avail);

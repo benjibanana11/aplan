@@ -632,4 +632,70 @@ describe("generatePlanning", () => {
     expect(taskAlerts.every((a) => !a.message.includes("00:00") && !a.message.includes("24:00"))).toBe(true);
     expect(taskAlerts.some((a) => a.message.includes("08:00") && a.message.includes("20:00"))).toBe(true);
   });
+
+  it("shrinks a task's block instead of stranding a leftover too short for any other task to fill (regression: 4h30 block on an 8h shift with a 4h minimum elsewhere)", () => {
+    const taskA = makeTask({
+      id: "a",
+      priorityRank: 1,
+      requiresTraining: false,
+      minContinuousMinutes: 240,
+      maxContinuousMinutes: 270,
+      targetStaff: 1,
+      maxStaff: 1,
+    });
+    const taskB = makeTask({
+      id: "b",
+      priorityRank: 2,
+      requiresTraining: false,
+      minContinuousMinutes: 240,
+      maxContinuousMinutes: 480,
+      targetStaff: 1,
+      maxStaff: 1,
+    });
+    const employee = makeEmployee({ id: "e1", startMinutes: timeToMinutes("08:00"), endMinutes: timeToMinutes("16:00") });
+    const context = makeContext({ employees: [employee], tasks: [taskA, taskB] });
+
+    const result = generatePlanning(context);
+
+    // Without the fix, "a" would naturally take its full 4h30 max (08:00-12:30), leaving a
+    // 3h30 remainder — too short for "b"'s 4h minimum, stranding the employee with unfilled time.
+    const blockA = result.blocks.find((b) => b.taskId === "a");
+    const blockB = result.blocks.find((b) => b.taskId === "b");
+    expect(blockA).toMatchObject({ startTime: "08:00", endTime: "12:00" });
+    expect(blockB).toMatchObject({ startTime: "12:00", endTime: "16:00" });
+    expect(result.alerts.some((a) => a.message.includes("Aucune tâche disponible"))).toBe(false);
+  });
+
+  it("keeps the natural (greedy-max) block length when no shrink could avoid the leftover anyway", () => {
+    const taskA = makeTask({
+      id: "a",
+      priorityRank: 1,
+      requiresTraining: false,
+      minContinuousMinutes: 270,
+      maxContinuousMinutes: 270,
+      targetStaff: 1,
+      maxStaff: 1,
+    });
+    // "b" needs a full 5h — even shrinking "a" down to its own (fixed) 4h30 minimum would only
+    // free up 3h30, still not enough for "b". The leftover is genuinely unavoidable here, so "a"
+    // should keep its natural length rather than shrinking for no benefit.
+    const taskB = makeTask({
+      id: "b",
+      priorityRank: 2,
+      requiresTraining: false,
+      minContinuousMinutes: 300,
+      maxContinuousMinutes: 300,
+      targetStaff: 1,
+      maxStaff: 1,
+    });
+    const employee = makeEmployee({ id: "e1", startMinutes: timeToMinutes("08:00"), endMinutes: timeToMinutes("16:00") });
+    const context = makeContext({ employees: [employee], tasks: [taskA, taskB] });
+
+    const result = generatePlanning(context);
+
+    const blockA = result.blocks.find((b) => b.taskId === "a");
+    expect(blockA).toMatchObject({ startTime: "08:00", endTime: "12:30" });
+    expect(result.blocks.some((b) => b.taskId === "b")).toBe(false);
+    expect(result.alerts.some((a) => a.message.includes("Aucune tâche disponible"))).toBe(true);
+  });
 });
